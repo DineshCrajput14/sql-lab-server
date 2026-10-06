@@ -8,6 +8,7 @@ import {
   updateTenant,
   deleteTenant,
   getTenantLedgerData,
+  getTenantSecurityLedgerData,
 } from "../models/tenantModel";
 import {
   getControlPanelSettings,
@@ -90,6 +91,7 @@ export async function createNewTenant(req: Request, res: Response) {
       identityProof,
       identityProofNumber,
       status,
+      inactiveDate,
       nextOfKinName,
       nextOfKinMobileNo,
       nextOfKinAddress,
@@ -97,14 +99,6 @@ export async function createNewTenant(req: Request, res: Response) {
 
     if (!name || !name.trim()) {
       return sendError(res, HTTP_STATUS.BAD_REQUEST, "Tenant name is required");
-    }
-
-    if (!mobileNo || !mobileNo.trim()) {
-      return sendError(
-        res,
-        HTTP_STATUS.BAD_REQUEST,
-        "Mobile number is required",
-      );
     }
 
     const controlSettings = await getControlPanelSettings();
@@ -124,7 +118,6 @@ export async function createNewTenant(req: Request, res: Response) {
         );
       }
     } else {
-      // Check duplicate regNo
       const isDuplicate = await checkDuplicateRegNo(finalRegNo);
       if (isDuplicate) {
         return sendError(
@@ -143,7 +136,8 @@ export async function createNewTenant(req: Request, res: Response) {
       regDate: regDate || new Date().toISOString().split("T")[0],
       name: name.trim(),
       address: address ? address.trim() : null,
-      mobileNo: mobileNo.trim(),
+      mobileNo:
+        mobileNo && String(mobileNo).trim() ? String(mobileNo).trim() : null,
       countryId: countryId ? parseInt(countryId, 10) : null,
       stateId: stateId ? parseInt(stateId, 10) : null,
       cityId: cityId ? parseInt(cityId, 10) : null,
@@ -152,6 +146,7 @@ export async function createNewTenant(req: Request, res: Response) {
         ? identityProofNumber.trim()
         : null,
       status: status || "Active",
+      inactiveDate: inactiveDate ? String(inactiveDate).trim() : null,
       nextOfKinName: nextOfKinName ? nextOfKinName.trim() : null,
       nextOfKinMobileNo: nextOfKinMobileNo ? nextOfKinMobileNo.trim() : null,
       nextOfKinAddress: nextOfKinAddress ? nextOfKinAddress.trim() : null,
@@ -193,6 +188,7 @@ export async function editTenant(req: Request, res: Response) {
       identityProof,
       identityProofNumber,
       status,
+      inactiveDate,
       nextOfKinName,
       nextOfKinMobileNo,
       nextOfKinAddress,
@@ -200,14 +196,6 @@ export async function editTenant(req: Request, res: Response) {
 
     if (!name || !name.trim()) {
       return sendError(res, HTTP_STATUS.BAD_REQUEST, "Tenant name is required");
-    }
-
-    if (!mobileNo || !mobileNo.trim()) {
-      return sendError(
-        res,
-        HTTP_STATUS.BAD_REQUEST,
-        "Mobile number is required",
-      );
     }
 
     if (!regNo || !String(regNo).trim()) {
@@ -219,8 +207,6 @@ export async function editTenant(req: Request, res: Response) {
     }
 
     const trimmedRegNo = String(regNo).trim();
-
-    // Check duplicate regNo excluding current tenant
     const isDuplicate = await checkDuplicateRegNo(trimmedRegNo, id);
     if (isDuplicate) {
       return sendError(
@@ -235,7 +221,8 @@ export async function editTenant(req: Request, res: Response) {
       regDate: regDate || new Date().toISOString().split("T")[0],
       name: name.trim(),
       address: address ? address.trim() : null,
-      mobileNo: mobileNo.trim(),
+      mobileNo:
+        mobileNo && String(mobileNo).trim() ? String(mobileNo).trim() : null,
       countryId: countryId ? parseInt(countryId, 10) : null,
       stateId: stateId ? parseInt(stateId, 10) : null,
       cityId: cityId ? parseInt(cityId, 10) : null,
@@ -244,6 +231,7 @@ export async function editTenant(req: Request, res: Response) {
         ? identityProofNumber.trim()
         : null,
       status: status || "Active",
+      inactiveDate: inactiveDate ? String(inactiveDate).trim() : null,
       nextOfKinName: nextOfKinName ? nextOfKinName.trim() : null,
       nextOfKinMobileNo: nextOfKinMobileNo ? nextOfKinMobileNo.trim() : null,
       nextOfKinAddress: nextOfKinAddress ? nextOfKinAddress.trim() : null,
@@ -280,8 +268,6 @@ export async function removeTenant(req: Request, res: Response) {
     if (isNaN(id)) {
       return sendError(res, HTTP_STATUS.BAD_REQUEST, "Invalid Tenant ID");
     }
-
-    // Check if tenant is in use in dependent tables
     const usageCheck = await checkTenantInUse(id);
     if (usageCheck.inUse) {
       return sendError(
@@ -346,6 +332,36 @@ export async function getTenantLedger(req: Request, res: Response) {
       res,
       HTTP_STATUS.INTERNAL_SERVER_ERROR,
       "Failed to fetch tenant ledger",
+      error.message,
+    );
+  }
+}
+
+export async function getTenantSecurityLedger(req: Request, res: Response) {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      return sendError(res, HTTP_STATUS.BAD_REQUEST, "Invalid Tenant ID");
+    }
+
+    const { fromDate, toDate } = req.query;
+
+    const ledgerData = await getTenantSecurityLedgerData(
+      id,
+      fromDate ? String(fromDate) : undefined,
+      toDate ? String(toDate) : undefined,
+    );
+
+    return res.status(HTTP_STATUS.OK).json({
+      status: true,
+      openingAmount: ledgerData.openingAmount,
+      ledger: ledgerData.ledger,
+    });
+  } catch (error: any) {
+    return sendError(
+      res,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR,
+      "Failed to fetch tenant security ledger",
       error.message,
     );
   }

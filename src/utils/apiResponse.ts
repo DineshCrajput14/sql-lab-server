@@ -5,7 +5,6 @@ export interface IApiResponse<T = any> {
   message: string;
   data?: T;
   error?: any;
-  timestamp: string;
 }
 
 export function sendSuccess<T>(
@@ -18,7 +17,6 @@ export function sendSuccess<T>(
     success: true,
     ...(message ? { message } : {}),
     ...(data !== undefined && { data }),
-    timestamp: new Date().toISOString(),
   };
   return res.status(statusCode).json(response);
 }

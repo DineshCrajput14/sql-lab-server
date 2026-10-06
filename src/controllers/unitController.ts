@@ -4,6 +4,7 @@ import {
   getUnitById,
   checkDuplicateUnitNo,
   checkUnitInUse,
+  checkUnitStatusEditable,
   createUnit,
   updateUnit,
   deleteUnit,
@@ -44,7 +45,14 @@ export async function getUnitDetailHandler(req: Request, res: Response) {
     if (!unit) {
       return sendError(res, HTTP_STATUS.NOT_FOUND, "Unit not found");
     }
-    return res.status(HTTP_STATUS.OK).json({ unit });
+    const statusCheck = await checkUnitStatusEditable(id);
+    return res.status(HTTP_STATUS.OK).json({
+      unit: {
+        ...unit,
+        canEditStatus: statusCheck.canEditStatus,
+        statusReason: statusCheck.reason,
+      },
+    });
   } catch (error: any) {
     return sendError(
       res,
@@ -93,7 +101,6 @@ export async function createNewUnitHandler(req: Request, res: Response) {
     const parsedFloorId = parseInt(floorId, 10);
     const trimmedUnitNo = unitNo.trim();
 
-    // Check duplicate unit_no under same building
     const isDuplicate = await checkDuplicateUnitNo(
       trimmedUnitNo,
       parsedBuildingId,
@@ -187,12 +194,33 @@ export async function editUnitHandler(req: Request, res: Response) {
       );
     }
 
+    const existingUnit = await getUnitById(id);
+    if (!existingUnit) {
+      return sendError(res, HTTP_STATUS.NOT_FOUND, "Unit not found");
+    }
+
+    const statusCheck = await checkUnitStatusEditable(id);
+    const requestedStatus = status ? status.trim() : existingUnit.status;
+
+    if (requestedStatus !== existingUnit.status && !statusCheck.canEditStatus) {
+      return sendError(
+        res,
+        HTTP_STATUS.BAD_REQUEST,
+        statusCheck.reason ||
+          "This unit is currently in use. Status cannot be changed.",
+      );
+    }
+
+    const finalStatus = statusCheck.canEditStatus
+      ? requestedStatus
+      : existingUnit.status;
+
     const success = await updateUnit(id, {
       propertyId: parsedPropertyId,
       buildingId: parsedBuildingId,
       floorId: parsedFloorId,
       unitNo: trimmedUnitNo,
-      status: status ? status.trim() : "Available",
+      status: finalStatus,
       charges:
         charges !== undefined && charges !== null ? parseFloat(charges) : 0,
       description: description ? description.trim() : null,

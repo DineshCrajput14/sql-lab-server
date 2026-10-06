@@ -60,9 +60,7 @@ export async function checkCategoryInUse(
       if (rows && rows.length > 0) {
         return { inUse: true, table };
       }
-    } catch (e) {
-      // Table does not exist in database yet
-    }
+    } catch (e) {}
   }
   return { inUse: false };
 }

@@ -111,7 +111,6 @@ export async function getNextTenantNumberAndIncrement(
     }
   }
 
-  // Increment next number
   await pool.query(
     "UPDATE control_panel_settings SET next_number_tenant = ? WHERE id = ?",
     [newNext, id],

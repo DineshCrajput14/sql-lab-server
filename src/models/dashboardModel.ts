@@ -91,8 +91,7 @@ export async function getDashboardSummary(): Promise<DashboardSummaryResponse> {
       COALESCE(r.receipt_mode, 'Cash') AS receiptMode,
       r.total_receivable AS totalReceivable,
       r.received_amount AS receivedAmount,
-      r.balance,
-      r.created_at AS createdAt
+      r.balance
     FROM rent_receipts r
     LEFT JOIN tenants t ON r.tenant_id = t.id
     LEFT JOIN units u ON r.unit_id = u.id

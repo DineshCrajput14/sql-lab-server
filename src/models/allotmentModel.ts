@@ -4,13 +4,11 @@ import { ResultSetHeader, RowDataPacket } from "mysql2";
 export interface AdditionalChargeData {
   id?: number;
   amenityId?: number;
-  name?: string;
   serviceName?: string;
   categoryId?: number;
   categoryName?: string;
   type?: string;
   chargeType?: string;
-  defaultCharges?: number;
   chargeAmount?: number;
 }
 
@@ -21,6 +19,7 @@ export interface AllotmentData {
   buildingId: number;
   unitId: number;
   charges: number;
+  securityAmount?: number;
   date: string;
   allotmentFrom: string;
   allotmentTo: string;
@@ -52,13 +51,12 @@ export async function getAllotmentsList(
       a.unit_id AS unitId,
       COALESCE(u.unit_no, '') AS unitNo,
       a.charges,
+      COALESCE(a.security_amount, 0.00) AS securityAmount,
       DATE_FORMAT(a.date, '%Y-%m-%d') AS date,
       DATE_FORMAT(a.allotment_from, '%Y-%m-%d') AS allotmentFrom,
       DATE_FORMAT(a.allotment_to, '%Y-%m-%d') AS allotmentTo,
       COALESCE(a.remarks, '') AS remarks,
-      a.status,
-      a.created_at AS createdAt,
-      a.updated_at AS updatedAt
+      a.status
     FROM allotments a
     LEFT JOIN tenants t ON a.tenant_id = t.id
     LEFT JOIN properties p ON a.property_id = p.id
@@ -97,7 +95,7 @@ export async function getAllotmentsList(
     return [];
   }
 
-  const allotmentIds = allotments.map((a) => a.id);
+  const allotmentIds = allotments.map((allotment) => allotment.id);
   const placeholders = allotmentIds.map(() => "?").join(",");
   const [chargesRows] = await pool.query<RowDataPacket[]>(
     `SELECT 
@@ -105,13 +103,11 @@ export async function getAllotmentsList(
        allotment_id AS allotmentId,
        COALESCE(amenity_id, id) AS id,
        amenity_id AS amenityId,
-       service_name AS name,
        service_name AS serviceName,
        category_id AS categoryId,
        category_name AS categoryName,
        type,
        charge_type AS chargeType,
-       charge_amount AS defaultCharges,
        charge_amount AS chargeAmount
      FROM allotment_service_charges
      WHERE allotment_id IN (${placeholders})`,
@@ -119,17 +115,22 @@ export async function getAllotmentsList(
   );
 
   const chargesByAllotment: { [key: number]: any[] } = {};
-  for (const c of chargesRows) {
-    if (!chargesByAllotment[c.allotmentId]) {
-      chargesByAllotment[c.allotmentId] = [];
+  for (const chargeItem of chargesRows) {
+    if (!chargesByAllotment[chargeItem.allotmentId]) {
+      chargesByAllotment[chargeItem.allotmentId] = [];
     }
-    chargesByAllotment[c.allotmentId].push(c);
+    chargesByAllotment[chargeItem.allotmentId].push(chargeItem);
   }
 
-  return allotments.map((allotment) => ({
-    ...allotment,
-    additionalCharges: chargesByAllotment[allotment.id] || [],
-  }));
+  const receivedByAllotment = await fetchReceivedByAllotments(allotmentIds);
+
+  return allotments.map((allotment) =>
+    formatAllotmentFinancials(
+      allotment,
+      chargesByAllotment[allotment.id] || [],
+      receivedByAllotment[allotment.id] || {},
+    ),
+  );
 }
 
 export async function getAllotmentById(id: number): Promise<any | null> {
@@ -145,13 +146,12 @@ export async function getAllotmentById(id: number): Promise<any | null> {
       a.unit_id AS unitId,
       COALESCE(u.unit_no, '') AS unitNo,
       a.charges,
+      COALESCE(a.security_amount, 0.00) AS securityAmount,
       DATE_FORMAT(a.date, '%Y-%m-%d') AS date,
       DATE_FORMAT(a.allotment_from, '%Y-%m-%d') AS allotmentFrom,
       DATE_FORMAT(a.allotment_to, '%Y-%m-%d') AS allotmentTo,
       COALESCE(a.remarks, '') AS remarks,
-      a.status,
-      a.created_at AS createdAt,
-      a.updated_at AS updatedAt
+      a.status
     FROM allotments a
     LEFT JOIN tenants t ON a.tenant_id = t.id
     LEFT JOIN properties p ON a.property_id = p.id
@@ -171,22 +171,130 @@ export async function getAllotmentById(id: number): Promise<any | null> {
        allotment_id AS allotmentId,
        COALESCE(amenity_id, id) AS id,
        amenity_id AS amenityId,
-       service_name AS name,
        service_name AS serviceName,
        category_id AS categoryId,
        category_name AS categoryName,
        type,
        charge_type AS chargeType,
-       charge_amount AS defaultCharges,
        charge_amount AS chargeAmount
      FROM allotment_service_charges
      WHERE allotment_id = ?`,
     [id],
   );
 
+  const [receiptRows] = await pool.query<RowDataPacket[]>(
+    `SELECT COUNT(*) AS receiptCount FROM rent_receipts WHERE allotment_id = ?`,
+    [id],
+  );
+  const hasReceipts = (receiptRows[0]?.receiptCount ?? 0) > 0;
+
+  const receivedByAllotment = await fetchReceivedByAllotments([id]);
+
+  return {
+    ...formatAllotmentFinancials(
+      allotment,
+      charges || [],
+      receivedByAllotment[id] || {},
+    ),
+    hasReceipts,
+  };
+}
+
+async function fetchReceivedByAllotments(
+  allotmentIds: number[],
+): Promise<{ [allotmentId: number]: { [serviceKey: string]: number } }> {
+  if (!allotmentIds.length) {
+    return {};
+  }
+  const placeholders = allotmentIds.map(() => "?").join(",");
+
+  const [receiptDetailsRows] = await pool.query<RowDataPacket[]>(
+    `SELECT 
+       r.allotment_id AS allotmentId,
+       LOWER(TRIM(d.service_name)) AS serviceKey,
+       SUM(COALESCE(d.received_amount, 0)) AS totalReceived
+     FROM rent_receipt_details d
+     JOIN rent_receipts r ON d.receipt_id = r.id
+     WHERE r.allotment_id IN (${placeholders})
+     GROUP BY r.allotment_id, LOWER(TRIM(d.service_name))`,
+    allotmentIds,
+  );
+
+  const [fallbackReceiptRows] = await pool.query<RowDataPacket[]>(
+    `SELECT 
+       r.allotment_id AS allotmentId,
+       SUM(COALESCE(r.received_amount, 0)) AS totalReceived
+     FROM rent_receipts r
+     WHERE r.allotment_id IN (${placeholders})
+       AND NOT EXISTS (SELECT 1 FROM rent_receipt_details d WHERE d.receipt_id = r.id)
+      GROUP BY r.allotment_id`,
+    allotmentIds,
+  );
+
+  const receivedByAllotment: {
+    [allotmentId: number]: { [serviceKey: string]: number };
+  } = {};
+
+  for (const row of receiptDetailsRows) {
+    const allotmentId = Number(row.allotmentId);
+    const serviceKey = String(row.serviceKey || "")
+      .trim()
+      .toLowerCase();
+    if (!receivedByAllotment[allotmentId]) {
+      receivedByAllotment[allotmentId] = {};
+    }
+    receivedByAllotment[allotmentId][serviceKey] =
+      (receivedByAllotment[allotmentId][serviceKey] || 0) +
+      Number(row.totalReceived || 0);
+  }
+
+  for (const row of fallbackReceiptRows) {
+    const allotmentId = Number(row.allotmentId);
+    if (!receivedByAllotment[allotmentId]) {
+      receivedByAllotment[allotmentId] = {};
+    }
+    receivedByAllotment[allotmentId]["rent"] =
+      (receivedByAllotment[allotmentId]["rent"] || 0) +
+      Number(row.totalReceived || 0);
+  }
+
+  return receivedByAllotment;
+}
+
+function formatAllotmentFinancials(
+  allotment: any,
+  charges: any[],
+  receivedMap: { [serviceKey: string]: number } = {},
+) {
+  const rentReceived = Number((receivedMap["rent"] || 0).toFixed(2));
+  const securityReceived = Number((receivedMap["security"] || 0).toFixed(2));
+
+  const additionalCharges = (charges || []).map((chargeItem) => {
+    const chargeKey = String(chargeItem.serviceName || "")
+      .trim()
+      .toLowerCase();
+    return {
+      ...chargeItem,
+      receivedAmount: Number((receivedMap[chargeKey] || 0).toFixed(2)),
+    };
+  });
+
+  let totalReceived = rentReceived + securityReceived;
+  for (const [serviceKey, amount] of Object.entries(receivedMap)) {
+    if (serviceKey !== "rent" && serviceKey !== "security") {
+      totalReceived += amount;
+    }
+  }
+
   return {
     ...allotment,
-    additionalCharges: charges || [],
+    serviceName: "Rent",
+    categoryName: "Rent",
+    rentReceived,
+    securityReceived,
+    totalReceivedAmount: Number(totalReceived.toFixed(2)),
+    receivedByServiceHead: receivedMap,
+    additionalCharges,
   };
 }
 
@@ -198,8 +306,8 @@ export async function createAllotment(data: AllotmentData): Promise<number> {
     const allotmentQuery = `
       INSERT INTO allotments (
         tenant_id, property_id, building_id, unit_id,
-        charges, date, allotment_from, allotment_to, remarks, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        charges, security_amount, date, allotment_from, allotment_to, remarks, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
     `;
     const allotmentValues = [
       data.tenantId,
@@ -207,6 +315,9 @@ export async function createAllotment(data: AllotmentData): Promise<number> {
       data.buildingId,
       data.unitId,
       data.charges || 0,
+      data.securityAmount !== undefined
+        ? Number(data.securityAmount) || 0
+        : Number(data.charges) || 0,
       data.date,
       data.allotmentFrom,
       data.allotmentTo,
@@ -232,14 +343,12 @@ export async function createAllotment(data: AllotmentData): Promise<number> {
       `;
       for (const charge of data.additionalCharges) {
         const amenityId = charge.amenityId || charge.id || null;
-        const serviceName =
-          charge.serviceName || charge.name || "Service Charge";
+        const serviceName = charge.serviceName;
         const categoryId = charge.categoryId || null;
         const categoryName = charge.categoryName || null;
         const type = charge.type || "Monthly";
         const chargeType = charge.chargeType || "Fixed";
-        const chargeAmount =
-          Number(charge.chargeAmount ?? charge.defaultCharges) || 0;
+        const chargeAmount = Number(charge.chargeAmount) || 0;
 
         await connection.query(chargeQuery, [
           allotmentId,
@@ -254,7 +363,6 @@ export async function createAllotment(data: AllotmentData): Promise<number> {
       }
     }
 
-    // Automatically mark the unit as Occupied
     await connection.query(
       `UPDATE units SET status = 'Occupied' WHERE id = ?`,
       [data.unitId],
@@ -278,7 +386,6 @@ export async function updateAllotment(
   try {
     await connection.beginTransaction();
 
-    // Check existing allotment to check if unit changed
     const [existingRows]: any = await connection.query(
       `SELECT unit_id FROM allotments WHERE id = ?`,
       [id],
@@ -297,6 +404,7 @@ export async function updateAllotment(
         building_id = ?,
         unit_id = ?,
         charges = ?,
+        security_amount = ?,
         date = ?,
         allotment_from = ?,
         allotment_to = ?,
@@ -310,6 +418,7 @@ export async function updateAllotment(
       data.buildingId,
       data.unitId,
       data.charges || 0,
+      data.securityAmount !== undefined ? Number(data.securityAmount) || 0 : 0,
       data.date,
       data.allotmentFrom,
       data.allotmentTo,
@@ -320,7 +429,6 @@ export async function updateAllotment(
 
     await connection.query(updateQuery, updateValues);
 
-    // Refresh additional charges
     await connection.query(
       `DELETE FROM allotment_service_charges WHERE allotment_id = ?`,
       [id],
@@ -338,14 +446,12 @@ export async function updateAllotment(
       `;
       for (const charge of data.additionalCharges) {
         const amenityId = charge.amenityId || charge.id || null;
-        const serviceName =
-          charge.serviceName || charge.name || "Service Charge";
+        const serviceName = charge.serviceName;
         const categoryId = charge.categoryId || null;
         const categoryName = charge.categoryName || null;
         const type = charge.type || "Monthly";
         const chargeType = charge.chargeType || "Fixed";
-        const chargeAmount =
-          Number(charge.chargeAmount ?? charge.defaultCharges) || 0;
+        const chargeAmount = Number(charge.chargeAmount) || 0;
 
         await connection.query(chargeQuery, [
           id,
@@ -360,9 +466,7 @@ export async function updateAllotment(
       }
     }
 
-    // Handle unit status updates if unit changed
     if (previousUnitId !== data.unitId) {
-      // Mark old unit Available if no other active allotment
       const [otherAllotments]: any = await connection.query(
         `SELECT 1 FROM allotments WHERE unit_id = ? AND id != ? AND status = 'Active' LIMIT 1`,
         [previousUnitId, id],
@@ -373,7 +477,7 @@ export async function updateAllotment(
           [previousUnitId],
         );
       }
-      // Mark new unit Occupied
+
       await connection.query(
         `UPDATE units SET status = 'Occupied' WHERE id = ?`,
         [data.unitId],
@@ -429,7 +533,6 @@ export async function deleteAllotment(id: number): Promise<boolean> {
     );
     await connection.query(`DELETE FROM allotments WHERE id = ?`, [id]);
 
-    // Check if unit still has active allotments
     const [otherAllotments]: any = await connection.query(
       `SELECT 1 FROM allotments WHERE unit_id = ? AND status = 'Active' LIMIT 1`,
       [unitId],

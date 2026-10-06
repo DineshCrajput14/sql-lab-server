@@ -69,7 +69,6 @@ export async function checkDuplicateAmenityName(
 export async function checkAmenityInUse(
   id: number,
 ): Promise<{ inUse: boolean; table?: string }> {
-  // Check allotment_service_charges by amenity_id
   try {
     const [ascRows]: any = await pool.query(
       `SELECT 1 FROM allotment_service_charges WHERE amenity_id = ? LIMIT 1`,

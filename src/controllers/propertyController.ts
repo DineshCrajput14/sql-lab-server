@@ -70,8 +70,6 @@ export async function createNewProperty(req: Request, res: Response) {
     }
 
     const trimmedName = name.trim();
-
-    // Check duplicate property name
     const isDuplicate = await checkDuplicatePropertyName(trimmedName);
     if (isDuplicate) {
       return sendError(
@@ -134,8 +132,6 @@ export async function editProperty(req: Request, res: Response) {
     }
 
     const trimmedName = name.trim();
-
-    // Check duplicate property name excluding current property ID
     const isDuplicate = await checkDuplicatePropertyName(trimmedName, id);
     if (isDuplicate) {
       return sendError(
@@ -184,7 +180,6 @@ export async function removeProperty(req: Request, res: Response) {
       return sendError(res, HTTP_STATUS.BAD_REQUEST, "Invalid Property ID");
     }
 
-    // Check if property is in use in dependent tables
     const usageCheck = await checkPropertyInUse(id);
     if (usageCheck.inUse) {
       return sendError(

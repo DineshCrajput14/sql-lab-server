@@ -26,15 +26,5 @@ router.get("/fee-receipts/:id", getRentReceiptDetail);
 router.post("/fee-receipts", createNewRentReceipt);
 router.put("/fee-receipts/:id", updateExistingRentReceipt);
 router.delete("/fee-receipts/:id", removeRentReceipt);
-router.get("/rent-receipts", getRentReceiptsList);
-router.get(
-  "/rent-receipts/:id/tenant-detail",
-  getTenantDetailForReceiptController,
-);
-router.get("/rent-receipts/:id/print", getRentReceiptPrintController);
-router.get("/rent-receipts/:id", getRentReceiptDetail);
-router.post("/rent-receipts", createNewRentReceipt);
-router.put("/rent-receipts/:id", updateExistingRentReceipt);
-router.delete("/rent-receipts/:id", removeRentReceipt);
 
 export default router;

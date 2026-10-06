@@ -1,13 +1,11 @@
 import { Server } from "http";
 import app from "./app";
-// import { initializeDatabase } from "./config/initDb";
 import { pool, dbRootConnection } from "./config/database";
 import { env } from "./config/env.config";
 
 let server: Server;
 
 async function startServer() {
-  // await initializeDatabase();
 
   server = app.listen(env.PORT, () => {
     console.log(`PMS Backend running on port ${env.PORT}`);

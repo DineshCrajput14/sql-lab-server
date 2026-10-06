@@ -120,6 +120,39 @@ export async function checkUnitInUse(
   return { inUse: false };
 }
 
+export async function checkUnitStatusEditable(
+  id: number,
+): Promise<{ canEditStatus: boolean; reason?: string }> {
+  const [activeAllotments]: any = await pool.query(
+    `SELECT a.id, t.name AS tenantName 
+     FROM allotments a 
+     LEFT JOIN tenants t ON a.tenant_id = t.id
+     WHERE a.unit_id = ? AND a.status = 'Active' LIMIT 1`,
+    [id],
+  );
+
+  if (activeAllotments && activeAllotments.length > 0) {
+    const tenantName = activeAllotments[0].tenantName || "a tenant";
+    return {
+      canEditStatus: false,
+      reason: `Unit is currently occupied by ${tenantName}. Status cannot be changed.`,
+    };
+  }
+
+  const [unitRows]: any = await pool.query(
+    `SELECT status FROM units WHERE id = ? LIMIT 1`,
+    [id],
+  );
+  if (unitRows && unitRows.length > 0 && unitRows[0].status === "Occupied") {
+    return {
+      canEditStatus: false,
+      reason: "Unit is marked as Occupied. Status cannot be changed.",
+    };
+  }
+
+  return { canEditStatus: true };
+}
+
 export async function createUnit(data: UnitData): Promise<number> {
   const query = `
     INSERT INTO units (property_id, building_id, floor_id, unit_no, status, charges, description)

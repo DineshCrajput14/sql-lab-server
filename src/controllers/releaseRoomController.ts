@@ -116,7 +116,6 @@ export async function updateExistingReleaseRoom(req: Request, res: Response) {
       return sendError(res, HTTP_STATUS.NOT_FOUND, "Release Room not found");
     }
 
-    // Business Rule: If releaseDate was set and has already passed, record is locked / read-only!
     if (existing.isReleaseDate && existing.releaseDate) {
       const todayStr = new Date().toISOString().split("T")[0];
       if (todayStr > existing.releaseDate) {

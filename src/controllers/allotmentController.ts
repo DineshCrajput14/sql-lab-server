@@ -65,6 +65,7 @@ export async function createNewAllotment(req: Request, res: Response) {
       buildingId,
       unitId,
       charges,
+      securityAmount,
       date,
       allotmentFrom,
       allotmentTo,
@@ -109,6 +110,10 @@ export async function createNewAllotment(req: Request, res: Response) {
       buildingId: parseInt(buildingId, 10),
       unitId: parseInt(unitId, 10),
       charges: Number(charges) || 0,
+      securityAmount:
+        securityAmount !== undefined
+          ? Number(securityAmount) || 0
+          : Number(charges) || 0,
       date: String(date),
       allotmentFrom: String(allotmentFrom),
       allotmentTo: String(allotmentTo),
@@ -154,6 +159,7 @@ export async function editAllotment(req: Request, res: Response) {
       buildingId,
       unitId,
       charges,
+      securityAmount,
       date,
       allotmentFrom,
       allotmentTo,
@@ -208,6 +214,10 @@ export async function editAllotment(req: Request, res: Response) {
         charges !== undefined
           ? Number(charges) || 0
           : Number(existing.charges) || 0,
+      securityAmount:
+        securityAmount !== undefined
+          ? Number(securityAmount) || 0
+          : Number(existing.securityAmount) || 0,
       date: String(resolvedDate),
       allotmentFrom: String(resolvedAllotmentFrom),
       allotmentTo: String(resolvedAllotmentTo),

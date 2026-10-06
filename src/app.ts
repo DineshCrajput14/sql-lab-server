@@ -28,7 +28,7 @@ app.get("/", (req, res) => {
 });
 
 app.get("/health", (req, res) => {
-  res.status(200).json({ status: "UP", timestamp: new Date().toISOString() });
+  res.status(200).json({ status: "UP" });
 });
 
 app.use("/api/v1", v1Routes);

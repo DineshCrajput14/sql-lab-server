@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 export interface UserData {
   id?: number;
   name: string;
-  email: string; // Used for Email / Username
+  email: string;
   username?: string;
   password?: string;
   phone?: string;

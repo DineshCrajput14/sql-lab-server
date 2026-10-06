@@ -7,13 +7,13 @@ export interface Country {
 
 export interface State {
   id: number;
-  country_id: number;
+  countryId: number;
   name: string;
 }
 
 export interface City {
   id: number;
-  state_id: number;
+  stateId: number;
   name: string;
 }
 
@@ -28,7 +28,7 @@ export async function getStatesByCountryId(
   countryId: number,
 ): Promise<State[]> {
   const [rows]: any = await pool.query(
-    "SELECT id, country_id, name FROM states WHERE country_id = ? ORDER BY name ASC",
+    "SELECT id, country_id AS countryId, name FROM states WHERE country_id = ? ORDER BY name ASC",
     [countryId],
   );
   return rows;
@@ -36,7 +36,7 @@ export async function getStatesByCountryId(
 
 export async function getCitiesByStateId(stateId: number): Promise<City[]> {
   const [rows]: any = await pool.query(
-    "SELECT id, state_id, name FROM cities WHERE state_id = ? ORDER BY name ASC",
+    "SELECT id, state_id AS stateId, name FROM cities WHERE state_id = ? ORDER BY name ASC",
     [stateId],
   );
   return rows;
@@ -44,14 +44,14 @@ export async function getCitiesByStateId(stateId: number): Promise<City[]> {
 
 export async function getAllCities(): Promise<City[]> {
   const [rows]: any = await pool.query(
-    "SELECT id, state_id, name FROM cities ORDER BY name ASC",
+    "SELECT id, state_id AS stateId, name FROM cities ORDER BY name ASC",
   );
   return rows;
 }
 
 export async function getCityById(id: number): Promise<City | null> {
   const [rows]: any = await pool.query(
-    "SELECT id, state_id, name FROM cities WHERE id = ?",
+    "SELECT id, state_id AS stateId, name FROM cities WHERE id = ?",
     [id],
   );
   return rows.length ? rows[0] : null;

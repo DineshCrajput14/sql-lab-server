@@ -61,7 +61,9 @@ export function resolveReceiptModeName(mode: any): string {
     typeof mode === "number" ||
     (!isNaN(Number(mode)) && typeof mode === "string" && mode.trim() !== "")
   ) {
-    const found = RECEIPT_MODES_LIST.find((m) => m.id === Number(mode));
+    const found = RECEIPT_MODES_LIST.find(
+      (modeItem) => modeItem.id === Number(mode),
+    );
     if (found) return found.name;
   }
   return String(mode);
@@ -73,7 +75,7 @@ export function resolveReceiptModeId(mode: any): number {
     return Number(mode);
   }
   const found = RECEIPT_MODES_LIST.find(
-    (m) => m.name.toLowerCase() === String(mode).toLowerCase(),
+    (modeItem) => modeItem.name.toLowerCase() === String(mode).toLowerCase(),
   );
   return found ? found.id : 1;
 }
@@ -131,8 +133,7 @@ export async function getAllReleaseRooms(
       r.balance,
       COALESCE(r.remarks, '') AS remarks,
       COALESCE(r.cheque_no, '') AS chequeDraftNo,
-      DATE_FORMAT(r.cheque_date, '%Y-%m-%d') AS chequeDraftDate,
-      r.created_at AS createdAt
+      DATE_FORMAT(r.cheque_date, '%Y-%m-%d') AS chequeDraftDate
     FROM release_rooms r
     LEFT JOIN tenants t ON r.tenant_id = t.id
     LEFT JOIN properties p ON r.property_id = p.id
@@ -265,8 +266,7 @@ export async function getReleaseRoomById(id: number): Promise<any | null> {
       r.balance,
       COALESCE(r.remarks, '') AS remarks,
       COALESCE(r.cheque_no, '') AS chequeDraftNo,
-      DATE_FORMAT(r.cheque_date, '%Y-%m-%d') AS chequeDraftDate,
-      r.created_at AS createdAt
+      DATE_FORMAT(r.cheque_date, '%Y-%m-%d') AS chequeDraftDate
     FROM release_rooms r
     LEFT JOIN tenants t ON r.tenant_id = t.id
     LEFT JOIN properties p ON r.property_id = p.id
@@ -676,15 +676,18 @@ export async function getTenantDetailForReleaseRoom(
   );
 
   const baseRent = Number(allotment.charges) || 0;
-  const additionalCharges = (chargesRows || []).map((c) => ({
-    serviceName: c.serviceName,
-    amount: Number(c.chargeAmount) || 0,
+  const additionalCharges = (chargesRows || []).map((chargeRow) => ({
+    serviceName: chargeRow.serviceName,
+    amount: Number(chargeRow.chargeAmount) || 0,
   }));
-  const validAdditional = additionalCharges.filter((c) => c.amount > 0);
+  const validAdditional = additionalCharges.filter(
+    (chargeItem) => chargeItem.amount > 0,
+  );
   const monthlyTotal =
-    validAdditional.length > 0
-      ? validAdditional.reduce((sum, c) => sum + c.amount, 0)
-      : baseRent;
+    baseRent +
+    (validAdditional.length > 0
+      ? validAdditional.reduce((sum, chargeItem) => sum + chargeItem.amount, 0)
+      : 0);
 
   const [paidDetails] = await pool.query<RowDataPacket[]>(
     `SELECT 
@@ -714,34 +717,37 @@ export async function getTenantDetailForReleaseRoom(
   );
 
   const refundMap = new Map<string, number>();
-  for (const rf of refundRows || []) {
+  for (const refundRow of refundRows || []) {
     refundMap.set(
-      `${rf.dueDate}_${rf.serviceName}`,
-      Number(rf.totalRefunded) || 0,
+      `${refundRow.dueDate}_${refundRow.serviceName}`,
+      Number(refundRow.totalRefunded) || 0,
     );
   }
 
   const eligibleDetails: any[] = [];
-  for (const d of paidDetails || []) {
-    const key = `${d.dueDate}_${d.serviceName}`;
+  for (const paidDetailItem of paidDetails || []) {
+    const key = `${paidDetailItem.dueDate}_${paidDetailItem.serviceName}`;
     const alreadyRefunded = refundMap.get(key) || 0;
     const remainingToRefund = Math.max(
       0,
-      (Number(d.receivedAmount) || 0) - alreadyRefunded,
+      (Number(paidDetailItem.receivedAmount) || 0) - alreadyRefunded,
     );
     if (alreadyRefunded > 0) {
       refundMap.set(
         key,
-        Math.max(0, alreadyRefunded - (Number(d.receivedAmount) || 0)),
+        Math.max(
+          0,
+          alreadyRefunded - (Number(paidDetailItem.receivedAmount) || 0),
+        ),
       );
     }
     if (remainingToRefund > 0) {
       eligibleDetails.push({
-        id: d.id,
-        receiptNo: d.receiptNo,
-        dueDate: d.dueDate,
-        serviceName: d.serviceName,
-        dueAmount: Number(d.dueAmount) || 0,
+        id: paidDetailItem.id,
+        receiptNo: paidDetailItem.receiptNo,
+        dueDate: paidDetailItem.dueDate,
+        serviceName: paidDetailItem.serviceName,
+        dueAmount: Number(paidDetailItem.dueAmount) || 0,
         receivedAmount: remainingToRefund,
       });
     }
@@ -755,37 +761,37 @@ export async function getTenantDetailForReleaseRoom(
       string,
       { amount: number; receiptNos: Set<string> }
     >();
-    for (const d of eligibleDetails) {
-      const cur = dateSumMap.get(d.dueDate) || {
+    for (const detailItem of eligibleDetails) {
+      const cur = dateSumMap.get(detailItem.dueDate) || {
         amount: 0,
         receiptNos: new Set<string>(),
       };
-      cur.amount += Number(d.receivedAmount) || 0;
-      if (d.receiptNo) {
-        cur.receiptNos.add(String(d.receiptNo));
+      cur.amount += Number(detailItem.receivedAmount) || 0;
+      if (detailItem.receiptNo) {
+        cur.receiptNos.add(String(detailItem.receiptNo));
       }
-      dateSumMap.set(d.dueDate, cur);
+      dateSumMap.set(detailItem.dueDate, cur);
     }
 
     let summaryIdx = 1;
-    dateSumMap.forEach((val, dueDate) => {
+    dateSumMap.forEach((dateSummary, dueDate) => {
       dueRentSummary.push({
         id: summaryIdx++,
         dueDate,
-        receiptNo: Array.from(val.receiptNos).join(", "),
-        amount: Number(val.amount.toFixed(2)),
+        receiptNo: Array.from(dateSummary.receiptNos).join(", "),
+        amount: Number(dateSummary.amount.toFixed(2)),
         selected: true,
       });
     });
 
-    eligibleDetails.forEach((d) => {
+    eligibleDetails.forEach((detailItem) => {
       receiptDetails.push({
-        id: d.id,
-        receiptNo: d.receiptNo,
-        dueDate: d.dueDate,
-        serviceName: d.serviceName,
-        dueAmount: d.dueAmount,
-        receivedAmount: d.receivedAmount,
+        id: detailItem.id,
+        receiptNo: detailItem.receiptNo,
+        dueDate: detailItem.dueDate,
+        serviceName: detailItem.serviceName,
+        dueAmount: detailItem.dueAmount,
+        receivedAmount: detailItem.receivedAmount,
       });
     });
   }

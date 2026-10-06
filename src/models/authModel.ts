@@ -14,7 +14,7 @@ export async function findUserByEmail(email: string) {
 
 export async function findUserById(id: number) {
   const [rows]: any = await pool.query(
-    "SELECT id, name, username, email, phone, userRoleCode, created_at FROM users WHERE id = ?",
+    "SELECT id, name, username, email, phone, userRoleCode FROM users WHERE id = ?",
     [id],
   );
   return rows.length > 0 ? rows[0] : null;

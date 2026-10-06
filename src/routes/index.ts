@@ -14,6 +14,7 @@ import allotmentRoutes from "./allotmentRoutes";
 import rentReceiptRoutes from "./rentReceiptRoutes";
 import releaseRoomRoutes from "./releaseRoomRoutes";
 import dashboardRoutes from "./dashboardRoutes";
+import reportRoutes from "./reportRoutes";
 
 const router = Router();
 
@@ -32,5 +33,6 @@ router.use("/", allotmentRoutes);
 router.use("/", rentReceiptRoutes);
 router.use("/", releaseRoomRoutes);
 router.use("/", dashboardRoutes);
+router.use("/", reportRoutes);
 
 export default router;

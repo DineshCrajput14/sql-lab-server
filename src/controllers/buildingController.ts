@@ -88,7 +88,6 @@ export async function createNewBuildingHandler(req: Request, res: Response) {
     const parsedPropertyTypeId = parseInt(propertyTypeId, 10);
     const trimmedName = name.trim();
 
-    // Check duplicate building name under same property
     const isDuplicate = await checkDuplicateBuildingName(
       trimmedName,
       parsedPropertyId,
@@ -154,7 +153,6 @@ export async function editBuildingHandler(req: Request, res: Response) {
     const parsedPropertyTypeId = parseInt(propertyTypeId, 10);
     const trimmedName = name.trim();
 
-    // Check duplicate building name under same property excluding current building ID
     const isDuplicate = await checkDuplicateBuildingName(
       trimmedName,
       parsedPropertyId,
@@ -208,7 +206,6 @@ export async function removeBuildingHandler(req: Request, res: Response) {
       return sendError(res, HTTP_STATUS.BAD_REQUEST, "Invalid Building ID");
     }
 
-    // Check if building is in use in dependent tables
     const usageCheck = await checkBuildingInUse(id);
     if (usageCheck.inUse) {
       return sendError(

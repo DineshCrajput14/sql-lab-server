@@ -27,7 +27,9 @@ function resolveReceiptModeName(mode: any): string {
     typeof mode === "number" ||
     (!isNaN(Number(mode)) && typeof mode === "string" && mode.trim() !== "")
   ) {
-    const found = RECEIPT_MODES_LIST.find((m) => m.id === Number(mode));
+    const found = RECEIPT_MODES_LIST.find(
+      (modeItem) => modeItem.id === Number(mode),
+    );
     if (found) return found.name;
   }
   return String(mode);
@@ -85,7 +87,7 @@ export async function getRentReceiptDetail(req: Request, res: Response) {
     }
 
     const modeObj = RECEIPT_MODES_LIST.find(
-      (m) => m.name === receipt.receiptMode,
+      (modeItem) => modeItem.name === receipt.receiptMode,
     );
     const receiptData = {
       ...receipt,
@@ -158,7 +160,9 @@ export async function createNewRentReceipt(req: Request, res: Response) {
     });
 
     const newReceipt = await getRentReceiptById(receiptId);
-    const modeObj = RECEIPT_MODES_LIST.find((m) => m.name === resolvedMode);
+    const modeObj = RECEIPT_MODES_LIST.find(
+      (modeItem) => modeItem.name === resolvedMode,
+    );
     const receiptData = newReceipt
       ? { ...newReceipt, receiptModeId: modeObj ? modeObj.id : 1 }
       : { id: receiptId, receiptModeId: 1 };
@@ -232,7 +236,9 @@ export async function updateExistingRentReceipt(req: Request, res: Response) {
 
     const updated = await getRentReceiptById(id);
     const modeObj = updated
-      ? RECEIPT_MODES_LIST.find((m) => m.name === updated.receiptMode)
+      ? RECEIPT_MODES_LIST.find(
+          (modeItem) => modeItem.name === updated.receiptMode,
+        )
       : null;
     const receiptData = updated
       ? { ...updated, receiptModeId: modeObj ? modeObj.id : 1 }

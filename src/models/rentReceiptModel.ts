@@ -73,8 +73,7 @@ export async function getAllRentReceipts(
       r.balance,
       COALESCE(r.remarks, '') AS remarks,
       COALESCE(r.cheque_no, '') AS chequeDraftNo,
-      DATE_FORMAT(r.cheque_date, '%Y-%m-%d') AS chequeDraftDate,
-      r.created_at AS createdAt
+      DATE_FORMAT(r.cheque_date, '%Y-%m-%d') AS chequeDraftDate
     FROM rent_receipts r
     LEFT JOIN tenants t ON r.tenant_id = t.id
     LEFT JOIN properties p ON r.property_id = p.id
@@ -190,8 +189,7 @@ export async function getRentReceiptById(id: number): Promise<any | null> {
       r.balance,
       COALESCE(r.remarks, '') AS remarks,
       COALESCE(r.cheque_no, '') AS chequeDraftNo,
-      DATE_FORMAT(r.cheque_date, '%Y-%m-%d') AS chequeDraftDate,
-      r.created_at AS createdAt
+      DATE_FORMAT(r.cheque_date, '%Y-%m-%d') AS chequeDraftDate
     FROM rent_receipts r
     LEFT JOIN tenants t ON r.tenant_id = t.id
     LEFT JOIN properties p ON r.property_id = p.id
@@ -235,6 +233,9 @@ export async function getRentReceiptById(id: number): Promise<any | null> {
       if (charges && charges.length > 0 && charges[0].service_name) {
         serviceName = charges[0].service_name;
       }
+    }
+    if (!serviceName) {
+      serviceName = "Rent";
     }
     const dueAmt = Number(receipt.totalReceivable) || 0;
     const recAmt = Number(receipt.receivedAmount) || 0;
@@ -332,7 +333,6 @@ export async function updateRentReceipt(
       );
     }
 
-    // Update details
     if (data.details && Array.isArray(data.details)) {
       await connection.query(
         `DELETE FROM rent_receipt_details WHERE receipt_id = ?`,
@@ -465,7 +465,6 @@ export async function deleteRentReceipt(id: number): Promise<boolean> {
   try {
     await connection.beginTransaction();
 
-    // Prevent deletion if an active refund was issued against this receipt in release_rooms
     const usageCheck = await checkRentReceiptInUse(id);
     if (usageCheck.inUse) {
       throw new Error(usageCheck.reason);
@@ -494,7 +493,9 @@ export interface PendingDueItem {
   id: number;
   dueDate: string;
   amount: number;
+  monthIndex?: number;
   selected?: boolean;
+  heads?: PendingReceiptDetailItem[];
 }
 
 export interface PendingReceiptDetailItem {
@@ -532,6 +533,7 @@ export async function getPendingDuesForTenantOrAllotment(
       a.unit_id AS unitId,
       COALESCE(u.unit_no, '') AS unitNo,
       a.charges,
+      COALESCE(a.security_amount, 0.00) AS securityAmount,
       DATE_FORMAT(a.date, '%Y-%m-%d') AS date,
       DATE_FORMAT(a.allotment_from, '%Y-%m-%d') AS allotmentFrom,
       DATE_FORMAT(a.allotment_to, '%Y-%m-%d') AS allotmentTo,
@@ -577,14 +579,13 @@ export async function getPendingDuesForTenantOrAllotment(
 
   const allotment = allotmentRows[0];
 
-  // Fetch additional service charges for this allotment
   const [chargesRows] = await pool.query<RowDataPacket[]>(
     `SELECT 
        id AS recordId,
        allotment_id AS allotmentId,
-       service_name AS name,
        service_name AS serviceName,
-       charge_amount AS defaultCharges,
+       type,
+       charge_type AS chargeType,
        charge_amount AS chargeAmount
      FROM allotment_service_charges
      WHERE allotment_id = ?`,
@@ -592,20 +593,27 @@ export async function getPendingDuesForTenantOrAllotment(
   );
 
   const baseRent = Number(allotment.charges) || 0;
-  const additionalCharges = chargesRows.map((c) => ({
-    serviceName: c.serviceName,
-    amount: Number(c.chargeAmount) || 0,
+  const additionalCharges = chargesRows.map((chargeRow) => ({
+    serviceName: chargeRow.serviceName,
+    type: chargeRow.type,
+    amount: Number(chargeRow.chargeAmount) || 0,
   }));
 
-  const validAdditional = additionalCharges.filter((c) => c.amount > 0);
-  let monthlyTotal = 0;
-  if (validAdditional.length > 0) {
-    monthlyTotal = validAdditional.reduce((sum, c) => sum + c.amount, 0);
-  } else {
-    monthlyTotal = baseRent;
+  const validAdditional = additionalCharges.filter(
+    (chargeItem) => chargeItem.amount > 0,
+  );
+  let monthlyAdditional = 0;
+  let oneTimeAdditional = 0;
+  for (const chargeItem of validAdditional) {
+    if (chargeItem.type === "Monthly") {
+      monthlyAdditional += chargeItem.amount;
+    } else if (chargeItem.type === "One Time") {
+      oneTimeAdditional += chargeItem.amount;
+    }
   }
 
-  // Generate due schedule based on allotment date cycle (allotmentFrom to allotmentTo)
+  const monthlyTotal = baseRent + monthlyAdditional;
+
   const startDateStr =
     allotment.allotmentFrom ||
     allotment.date ||
@@ -614,14 +622,16 @@ export async function getPendingDuesForTenantOrAllotment(
 
   const startParts = startDateStr
     .split("-")
-    .map((x: string) => parseInt(x, 10));
+    .map((part: string) => parseInt(part, 10));
   const startYear = startParts[0] || new Date().getFullYear();
-  const startMonth = (startParts[1] || 1) - 1; // 0-indexed
+  const startMonth = (startParts[1] || 1) - 1;
   const startDay = startParts[2] || 1;
 
   let totalMonths = 12;
   if (endDateStr) {
-    const endParts = endDateStr.split("-").map((x: string) => parseInt(x, 10));
+    const endParts = endDateStr
+      .split("-")
+      .map((part: string) => parseInt(part, 10));
     const endYear = endParts[0] || startYear;
     const endMonth = (endParts[1] || 1) - 1;
     totalMonths = (endYear - startYear) * 12 + (endMonth - startMonth) + 1;
@@ -629,7 +639,11 @@ export async function getPendingDuesForTenantOrAllotment(
     totalMonths = Math.min(totalMonths, 120);
   }
 
-  const scheduledDueDates: string[] = [];
+  const scheduledDueDates: {
+    dueDate: string;
+    monthIndex: number;
+    totalDue: number;
+  }[] = [];
   for (let i = 0; i < totalMonths; i++) {
     const curYear = startYear + Math.floor((startMonth + i) / 12);
     const curMonth = (startMonth + i) % 12;
@@ -641,14 +655,16 @@ export async function getPendingDuesForTenantOrAllotment(
     const dueDate = `${yyyy}-${mm}-${dd}`;
 
     if (!endDateStr || dueDate <= endDateStr) {
-      scheduledDueDates.push(dueDate);
+      const monthDue =
+        i === 0 ? monthlyTotal + oneTimeAdditional : monthlyTotal;
+      scheduledDueDates.push({ dueDate, monthIndex: i, totalDue: monthDue });
     }
   }
 
-  // Fetch already received amounts for these due dates from rent_receipt_details
   let paidQuery = `
     SELECT 
       DATE_FORMAT(d.due_date, '%Y-%m-%d') AS dueDate,
+      COALESCE(NULLIF(TRIM(d.service_name), ''), 'Rent') AS serviceName,
       SUM(d.received_amount) AS totalReceived
     FROM rent_receipt_details d
     JOIN rent_receipts r ON d.receipt_id = r.id
@@ -659,70 +675,98 @@ export async function getPendingDuesForTenantOrAllotment(
     paidQuery += ` AND r.id != ?`;
     paidParams.push(excludeReceiptId);
   }
-  paidQuery += ` GROUP BY DATE_FORMAT(d.due_date, '%Y-%m-%d')`;
+  paidQuery += ` GROUP BY DATE_FORMAT(d.due_date, '%Y-%m-%d'), COALESCE(NULLIF(TRIM(d.service_name), ''), 'Rent')`;
 
   const [paidRows] = await pool.query<RowDataPacket[]>(paidQuery, paidParams);
-  const paidMap = new Map<string, number>();
+  const paidHeadMap = new Map<string, number>();
   for (const row of paidRows) {
-    paidMap.set(row.dueDate, Number(row.totalReceived) || 0);
+    const headKey = `${row.dueDate}_${String(row.serviceName || "")
+      .trim()
+      .toLowerCase()}`;
+    paidHeadMap.set(headKey, Number(row.totalReceived) || 0);
   }
 
-  // Filter for pending due dates
   const dueRentSummary: PendingDueItem[] = [];
   const pendingDetails: PendingReceiptDetailItem[] = [];
 
   let idx = 1;
-  for (const dueDate of scheduledDueDates) {
-    const alreadyPaid = paidMap.get(dueDate) || 0;
-    const remaining = Math.max(0, monthlyTotal - alreadyPaid);
-    if (remaining > 0.01) {
+  for (const item of scheduledDueDates) {
+    const datePendingHeads: PendingReceiptDetailItem[] = [];
+
+    if (baseRent > 0) {
+      const rentHeadName = "Rent";
+      const rentKey = `${item.dueDate}_${rentHeadName.toLowerCase()}`;
+      const rentPaid = paidHeadMap.get(rentKey) || 0;
+      const rentRemaining = Number(Math.max(0, baseRent - rentPaid).toFixed(2));
+      if (rentRemaining > 0.01) {
+        datePendingHeads.push({
+          dueDate: item.dueDate,
+          serviceName: rentHeadName,
+          dueAmount: rentRemaining,
+          receivedAmount: rentRemaining,
+        });
+      }
+    }
+
+    const securityAmount = Number(allotment.securityAmount) || 0;
+    if (securityAmount > 0 && item.monthIndex === 0) {
+      const secHeadName = "Security";
+      const secKey = `${item.dueDate}_${secHeadName.toLowerCase()}`;
+      const secPaid = paidHeadMap.get(secKey) || 0;
+      const secRemaining = Number(
+        Math.max(0, securityAmount - secPaid).toFixed(2),
+      );
+      if (secRemaining > 0.01) {
+        datePendingHeads.push({
+          dueDate: item.dueDate,
+          serviceName: secHeadName,
+          dueAmount: secRemaining,
+          receivedAmount: secRemaining,
+        });
+      }
+    }
+
+    for (const chargeItem of validAdditional) {
+      const isApplicable =
+        chargeItem.type === "Monthly" ||
+        (chargeItem.type === "One Time" && item.monthIndex === 0);
+
+      if (isApplicable) {
+        const headKey = `${item.dueDate}_${chargeItem.serviceName.trim().toLowerCase()}`;
+        const headPaid = paidHeadMap.get(headKey) || 0;
+        const headRemaining = Number(
+          Math.max(0, chargeItem.amount - headPaid).toFixed(2),
+        );
+        if (headRemaining > 0.01) {
+          datePendingHeads.push({
+            dueDate: item.dueDate,
+            serviceName: chargeItem.serviceName,
+            dueAmount: headRemaining,
+            receivedAmount: headRemaining,
+          });
+        }
+      }
+    }
+
+    const dateTotalRemaining = Number(
+      datePendingHeads
+        .reduce((sum, head) => sum + head.dueAmount, 0)
+        .toFixed(2),
+    );
+
+    if (dateTotalRemaining > 0.01) {
       const isFirst = dueRentSummary.length === 0;
       dueRentSummary.push({
         id: idx++,
-        dueDate,
-        amount: Number(remaining.toFixed(2)),
+        dueDate: item.dueDate,
+        amount: dateTotalRemaining,
+        monthIndex: item.monthIndex,
         selected: isFirst,
+        heads: datePendingHeads,
       });
 
       if (isFirst) {
-        const remainingForDetails = Number(remaining.toFixed(2));
-        if (validAdditional.length > 0) {
-          if (validAdditional.length === 1) {
-            pendingDetails.push({
-              dueDate,
-              serviceName: validAdditional[0].serviceName,
-              dueAmount: remainingForDetails,
-              receivedAmount: remainingForDetails,
-            });
-          } else {
-            let allocated = 0;
-            validAdditional.forEach((item, itemIdx) => {
-              const itemAmt = item.amount;
-              const ratio =
-                monthlyTotal > 0
-                  ? itemAmt / monthlyTotal
-                  : 1 / validAdditional.length;
-              const headDue =
-                itemIdx === validAdditional.length - 1
-                  ? Number((remainingForDetails - allocated).toFixed(2))
-                  : Number((remainingForDetails * ratio).toFixed(2));
-              allocated += headDue;
-              pendingDetails.push({
-                dueDate,
-                serviceName: item.serviceName,
-                dueAmount: headDue,
-                receivedAmount: headDue,
-              });
-            });
-          }
-        } else if (baseRent > 0) {
-          pendingDetails.push({
-            dueDate,
-            serviceName: chargesRows[0]?.serviceName || "",
-            dueAmount: remainingForDetails,
-            receivedAmount: remainingForDetails,
-          });
-        }
+        pendingDetails.push(...datePendingHeads);
       }
     }
   }
@@ -734,6 +778,9 @@ export async function getPendingDuesForTenantOrAllotment(
     hasAllotment: true,
     allotment: {
       ...allotment,
+      serviceName: "Rent",
+      categoryName: "Rent",
+      securityAmount: Number(allotment.securityAmount) || 0,
       additionalCharges: chargesRows,
     },
     dueRentSummary,

@@ -85,7 +85,6 @@ export async function login(req: Request, res: Response) {
       ],
     });
   } catch (error: any) {
-    console.error("Login Error:", error);
     return sendError(
       res,
       HTTP_STATUS.INTERNAL_SERVER_ERROR,
@@ -133,7 +132,6 @@ export async function register(req: Request, res: Response) {
       { userId },
     );
   } catch (error: any) {
-    console.error("Registration Error:", error);
     return sendError(
       res,
       HTTP_STATUS.INTERNAL_SERVER_ERROR,
@@ -157,7 +155,7 @@ export async function getProfile(req: Request, res: Response) {
 
     const organization = await getPrimaryOrganization();
 
-    return sendSuccess(res, HTTP_STATUS.OK, "User profile  successfully", {
+    return sendSuccess(res, HTTP_STATUS.OK, "User profile fetched successfully", {
       user,
       organization,
     });
