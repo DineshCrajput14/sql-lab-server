@@ -165,7 +165,11 @@ export async function getMonthlyRentRegisterReport(
     LEFT JOIN (
       SELECT 
         receipt_id,
-        GROUP_CONCAT(DISTINCT DATE_FORMAT(due_date, '%b-%Y') ORDER BY due_date ASC SEPARATOR ', ') AS due_months
+        CASE
+          WHEN DATE_FORMAT(MIN(due_date), '%b-%Y') = DATE_FORMAT(MAX(due_date), '%b-%Y')
+            THEN DATE_FORMAT(MIN(due_date), '%b-%Y')
+          ELSE CONCAT(DATE_FORMAT(MIN(due_date), '%b-%Y'), ' - ', DATE_FORMAT(MAX(due_date), '%b-%Y'))
+        END AS due_months
       FROM rent_receipt_details
       GROUP BY receipt_id
     ) rd ON rd.receipt_id = r.id

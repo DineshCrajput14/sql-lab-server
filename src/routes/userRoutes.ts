@@ -6,8 +6,11 @@ import {
   editUserHandler,
   removeUserHandler,
 } from "../controllers/userController";
+import { authenticate } from "../middlewares/authentication";
 
 const router = Router();
+
+router.use(authenticate);
 
 router.get("/users", getUsersListHandler);
 router.get("/users/:id", getUserDetailHandler);

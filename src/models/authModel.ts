@@ -20,25 +20,22 @@ export async function findUserById(id: number) {
   return rows.length > 0 ? rows[0] : null;
 }
 
-export async function createUser(userData: {
-  name: string;
-  username?: string;
-  email: string;
-  passwordHash: string;
-  phone?: string;
-  userRoleCode?: string;
-}) {
-  const username = userData.username || userData.email.split("@")[0];
-  const [result]: any = await pool.query(
-    "INSERT INTO users (name, username, email, password, phone, userRoleCode) VALUES (?, ?, ?, ?, ?, ?)",
-    [
-      userData.name,
-      username,
-      userData.email,
-      userData.passwordHash,
-      userData.phone || null,
-      userData.userRoleCode,
-    ],
+export async function findUserWithPasswordById(id: number) {
+  const [rows]: any = await pool.query(
+    "SELECT id, password FROM users WHERE id = ?",
+    [id],
   );
-  return result.insertId;
+  return rows.length > 0 ? rows[0] : null;
+}
+
+export async function updateUserPassword(
+  id: number,
+  passwordHash: string,
+  plainPassword: string,
+) {
+  const [result]: any = await pool.query(
+    "UPDATE users SET password = ?, plain_password = ? WHERE id = ?",
+    [passwordHash, plainPassword, id],
+  );
+  return result.affectedRows > 0;
 }

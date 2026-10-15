@@ -85,6 +85,7 @@ export async function createNewTenant(req: Request, res: Response) {
       name,
       address,
       mobileNo,
+      alternateMobileNo,
       countryId,
       stateId,
       cityId,
@@ -95,6 +96,9 @@ export async function createNewTenant(req: Request, res: Response) {
       nextOfKinName,
       nextOfKinMobileNo,
       nextOfKinAddress,
+      employerName,
+      employerContactNo,
+      employerAddress,
     } = req.body;
 
     if (!name || !name.trim()) {
@@ -138,6 +142,10 @@ export async function createNewTenant(req: Request, res: Response) {
       address: address ? address.trim() : null,
       mobileNo:
         mobileNo && String(mobileNo).trim() ? String(mobileNo).trim() : null,
+      alternateMobileNo:
+        alternateMobileNo && String(alternateMobileNo).trim()
+          ? String(alternateMobileNo).trim()
+          : null,
       countryId: countryId ? parseInt(countryId, 10) : null,
       stateId: stateId ? parseInt(stateId, 10) : null,
       cityId: cityId ? parseInt(cityId, 10) : null,
@@ -150,6 +158,18 @@ export async function createNewTenant(req: Request, res: Response) {
       nextOfKinName: nextOfKinName ? nextOfKinName.trim() : null,
       nextOfKinMobileNo: nextOfKinMobileNo ? nextOfKinMobileNo.trim() : null,
       nextOfKinAddress: nextOfKinAddress ? nextOfKinAddress.trim() : null,
+      employerName:
+        employerName && String(employerName).trim()
+          ? String(employerName).trim()
+          : null,
+      employerContactNo:
+        employerContactNo && String(employerContactNo).trim()
+          ? String(employerContactNo).trim()
+          : null,
+      employerAddress:
+        employerAddress && String(employerAddress).trim()
+          ? String(employerAddress).trim()
+          : null,
     });
 
     const newTenant = await getTenantById(tenantId);
@@ -182,6 +202,7 @@ export async function editTenant(req: Request, res: Response) {
       name,
       address,
       mobileNo,
+      alternateMobileNo,
       countryId,
       stateId,
       cityId,
@@ -192,6 +213,9 @@ export async function editTenant(req: Request, res: Response) {
       nextOfKinName,
       nextOfKinMobileNo,
       nextOfKinAddress,
+      employerName,
+      employerContactNo,
+      employerAddress,
     } = req.body;
 
     if (!name || !name.trim()) {
@@ -223,6 +247,10 @@ export async function editTenant(req: Request, res: Response) {
       address: address ? address.trim() : null,
       mobileNo:
         mobileNo && String(mobileNo).trim() ? String(mobileNo).trim() : null,
+      alternateMobileNo:
+        alternateMobileNo && String(alternateMobileNo).trim()
+          ? String(alternateMobileNo).trim()
+          : null,
       countryId: countryId ? parseInt(countryId, 10) : null,
       stateId: stateId ? parseInt(stateId, 10) : null,
       cityId: cityId ? parseInt(cityId, 10) : null,
@@ -235,6 +263,18 @@ export async function editTenant(req: Request, res: Response) {
       nextOfKinName: nextOfKinName ? nextOfKinName.trim() : null,
       nextOfKinMobileNo: nextOfKinMobileNo ? nextOfKinMobileNo.trim() : null,
       nextOfKinAddress: nextOfKinAddress ? nextOfKinAddress.trim() : null,
+      employerName:
+        employerName && String(employerName).trim()
+          ? String(employerName).trim()
+          : null,
+      employerContactNo:
+        employerContactNo && String(employerContactNo).trim()
+          ? String(employerContactNo).trim()
+          : null,
+      employerAddress:
+        employerAddress && String(employerAddress).trim()
+          ? String(employerAddress).trim()
+          : null,
     });
 
     if (!success) {

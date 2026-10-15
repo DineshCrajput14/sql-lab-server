@@ -9,6 +9,7 @@ export interface TenantData {
   name: string;
   address?: string | null;
   mobileNo?: string | null;
+  alternateMobileNo?: string | null;
   countryId?: number | null;
   stateId?: number | null;
   cityId?: number | null;
@@ -19,6 +20,9 @@ export interface TenantData {
   nextOfKinName?: string | null;
   nextOfKinMobileNo?: string | null;
   nextOfKinAddress?: string | null;
+  employerName?: string | null;
+  employerContactNo?: string | null;
+  employerAddress?: string | null;
 }
 
 export interface TenantFilterParams {
@@ -41,6 +45,7 @@ export async function getAllTenants(
       t.name,
       t.address,
       t.mobile_no AS mobileNo,
+      COALESCE(t.alternate_mobile_no, '') AS alternateMobileNo,
       t.country_id AS countryId,
       t.state_id AS stateId,
       t.city_id AS cityId,
@@ -53,7 +58,10 @@ export async function getAllTenants(
       DATE_FORMAT(t.inactive_date, '%Y-%m-%d') AS inactiveDate,
       t.next_of_kin_name AS nextOfKinName,
       t.next_of_kin_mobile_no AS nextOfKinMobileNo,
-      t.next_of_kin_address AS nextOfKinAddress
+      t.next_of_kin_address AS nextOfKinAddress,
+      t.employer_name AS employerName,
+      t.employer_contact_no AS employerContactNo,
+      t.employer_address AS employerAddress
     FROM tenants t
     LEFT JOIN cities c ON t.city_id = c.id
     LEFT JOIN states s ON t.state_id = s.id
@@ -76,14 +84,14 @@ export async function getAllTenants(
       query += ` AND t.reg_no = ?`;
       params.push(filters.keyword.trim());
     } else if (filters.searchField === "mobileNo") {
-      query += ` AND t.mobile_no LIKE ?`;
-      params.push(kw);
+      query += ` AND (t.mobile_no LIKE ? OR t.alternate_mobile_no LIKE ?)`;
+      params.push(kw, kw);
     } else if (filters.searchField === "identityProofNumber") {
       query += ` AND t.identity_proof_number LIKE ?`;
       params.push(kw);
     } else {
-      query += ` AND (t.name LIKE ? OR t.reg_no LIKE ? OR t.mobile_no LIKE ? OR t.identity_proof_number LIKE ?)`;
-      params.push(kw, kw, kw, kw);
+      query += ` AND (t.name LIKE ? OR t.reg_no LIKE ? OR t.mobile_no LIKE ? OR t.alternate_mobile_no LIKE ? OR t.identity_proof_number LIKE ?)`;
+      params.push(kw, kw, kw, kw, kw);
     }
   }
 
@@ -113,6 +121,7 @@ export async function getTenantById(id: number): Promise<any | null> {
       t.name,
       t.address,
       t.mobile_no AS mobileNo,
+      COALESCE(t.alternate_mobile_no, '') AS alternateMobileNo,
       t.country_id AS countryId,
       t.state_id AS stateId,
       t.city_id AS cityId,
@@ -125,7 +134,10 @@ export async function getTenantById(id: number): Promise<any | null> {
       DATE_FORMAT(t.inactive_date, '%Y-%m-%d') AS inactiveDate,
       t.next_of_kin_name AS nextOfKinName,
       t.next_of_kin_mobile_no AS nextOfKinMobileNo,
-      t.next_of_kin_address AS nextOfKinAddress
+      t.next_of_kin_address AS nextOfKinAddress,
+      t.employer_name AS employerName,
+      t.employer_contact_no AS employerContactNo,
+      t.employer_address AS employerAddress
     FROM tenants t
     LEFT JOIN cities c ON t.city_id = c.id
     LEFT JOIN states s ON t.state_id = s.id
@@ -211,13 +223,17 @@ export async function checkTenantInUse(
 }
 
 export async function createTenant(data: TenantData): Promise<number> {
+  const altMobile = data.alternateMobileNo
+    ? data.alternateMobileNo.trim()
+    : null;
   const query = `
     INSERT INTO tenants (
-      reg_no, reg_date, name, address, mobile_no,
+      reg_no, reg_date, name, address, mobile_no, alternate_mobile_no,
       country_id, state_id, city_id,
       identity_proof, identity_proof_number,
-      status, inactive_date, next_of_kin_name, next_of_kin_mobile_no, next_of_kin_address
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+      status, inactive_date, next_of_kin_name, next_of_kin_mobile_no, next_of_kin_address,
+      employer_name, employer_contact_no, employer_address
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
   `;
   const values = [
     data.regNo,
@@ -225,6 +241,7 @@ export async function createTenant(data: TenantData): Promise<number> {
     data.name,
     data.address ?? null,
     data.mobileNo ? data.mobileNo.trim() : null,
+    altMobile,
     data.countryId ?? null,
     data.stateId ?? null,
     data.cityId ?? null,
@@ -235,6 +252,9 @@ export async function createTenant(data: TenantData): Promise<number> {
     data.nextOfKinName ?? null,
     data.nextOfKinMobileNo ?? null,
     data.nextOfKinAddress ?? null,
+    data.employerName ? data.employerName.trim() : null,
+    data.employerContactNo ? data.employerContactNo.trim() : null,
+    data.employerAddress ? data.employerAddress.trim() : null,
   ];
   const [result] = await pool.query<ResultSetHeader>(query, values);
   return result.insertId;
@@ -244,6 +264,9 @@ export async function updateTenant(
   id: number,
   data: TenantData,
 ): Promise<boolean> {
+  const altMobile = data.alternateMobileNo
+    ? data.alternateMobileNo.trim()
+    : null;
   const query = `
     UPDATE tenants
     SET 
@@ -252,6 +275,7 @@ export async function updateTenant(
       name = ?,
       address = ?,
       mobile_no = ?,
+      alternate_mobile_no = ?,
       country_id = ?,
       state_id = ?,
       city_id = ?,
@@ -261,7 +285,10 @@ export async function updateTenant(
       inactive_date = ?,
       next_of_kin_name = ?,
       next_of_kin_mobile_no = ?,
-      next_of_kin_address = ?
+      next_of_kin_address = ?,
+      employer_name = ?,
+      employer_contact_no = ?,
+      employer_address = ?
     WHERE id = ?;
   `;
   const values = [
@@ -270,6 +297,7 @@ export async function updateTenant(
     data.name,
     data.address ?? null,
     data.mobileNo ? data.mobileNo.trim() : null,
+    altMobile,
     data.countryId ?? null,
     data.stateId ?? null,
     data.cityId ?? null,
@@ -280,6 +308,9 @@ export async function updateTenant(
     data.nextOfKinName ?? null,
     data.nextOfKinMobileNo ?? null,
     data.nextOfKinAddress ?? null,
+    data.employerName ? data.employerName.trim() : null,
+    data.employerContactNo ? data.employerContactNo.trim() : null,
+    data.employerAddress ? data.employerAddress.trim() : null,
     id,
   ];
   const [result] = await pool.query<ResultSetHeader>(query, values);

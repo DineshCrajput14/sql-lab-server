@@ -1,7 +1,13 @@
 import { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { findUserByEmail, findUserById, createUser } from "../models/authModel";
+import {
+  findUserByEmail,
+  findUserById,
+  findUserWithPasswordById,
+  updateUserPassword,
+} from "../models/authModel";
+import { getUserPermissions } from "../models/userModel";
 import { getPrimaryOrganization } from "../models/organizationModel";
 import { sendSuccess, sendError } from "../utils/apiResponse";
 import { HTTP_STATUS } from "../config/constants";
@@ -56,6 +62,8 @@ export async function login(req: Request, res: Response) {
     );
 
     const organization = await getPrimaryOrganization();
+    const { allowedAppModules, allowedAppActivities } =
+      getUserPermissions(user);
 
     return sendSuccess(res, HTTP_STATUS.OK, "", {
       token,
@@ -67,75 +75,14 @@ export async function login(req: Request, res: Response) {
         userRoleCode,
       },
       organization,
-      allowedAppModules: [
-        "Dashboard",
-        "Masters",
-        "Transactions",
-        "Reports",
-        "Users",
-        "Settings",
-      ],
-      allowedAppActivities: [
-        "Dashboard.View",
-        "Masters.View",
-        "Transactions.View",
-        "Reports.View",
-        "Users.View",
-        "Settings.View",
-      ],
+      allowedAppModules,
+      allowedAppActivities,
     });
   } catch (error: any) {
     return sendError(
       res,
       HTTP_STATUS.INTERNAL_SERVER_ERROR,
       "Server error during authentication",
-      error.message,
-    );
-  }
-}
-
-export async function register(req: Request, res: Response) {
-  try {
-    const { name, username, email, password, phone, userRoleCode } = req.body;
-
-    if (!name || !email || !password) {
-      return sendError(
-        res,
-        HTTP_STATUS.BAD_REQUEST,
-        "Name, email, and password are required",
-      );
-    }
-
-    const existing = await findUserByEmail(email);
-    if (existing) {
-      return sendError(
-        res,
-        HTTP_STATUS.BAD_REQUEST,
-        "User with this email already exists",
-      );
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const userId = await createUser({
-      name,
-      username,
-      email,
-      passwordHash: hashedPassword,
-      phone,
-      userRoleCode,
-    });
-
-    return sendSuccess(
-      res,
-      HTTP_STATUS.CREATED,
-      "User registered successfully",
-      { userId },
-    );
-  } catch (error: any) {
-    return sendError(
-      res,
-      HTTP_STATUS.INTERNAL_SERVER_ERROR,
-      "Server error during registration",
       error.message,
     );
   }
@@ -155,7 +102,7 @@ export async function getProfile(req: Request, res: Response) {
 
     const organization = await getPrimaryOrganization();
 
-    return sendSuccess(res, HTTP_STATUS.OK, "User profile fetched successfully", {
+    return sendSuccess(res, HTTP_STATUS.OK, "User profile  successfully", {
       user,
       organization,
     });
@@ -164,6 +111,67 @@ export async function getProfile(req: Request, res: Response) {
       res,
       HTTP_STATUS.INTERNAL_SERVER_ERROR,
       "Error fetching user profile",
+      error.message,
+    );
+  }
+}
+
+export async function changePassword(req: Request, res: Response) {
+  try {
+    const authReq = req as AuthRequest;
+    if (!authReq.user?.id) {
+      return sendError(res, HTTP_STATUS.UNAUTHORIZED, "Unauthorized");
+    }
+
+    const { oldPassword, newPassword } = req.body;
+    if (!oldPassword || !newPassword) {
+      return sendError(
+        res,
+        HTTP_STATUS.BAD_REQUEST,
+        "Old password and new password are required",
+      );
+    }
+
+    if (oldPassword === newPassword) {
+      return sendError(
+        res,
+        HTTP_STATUS.BAD_REQUEST,
+        "New password must be different from the old password.",
+      );
+    }
+
+    if (newPassword.trim().length < 6) {
+      return sendError(
+        res,
+        HTTP_STATUS.BAD_REQUEST,
+        "New password must be at least 6 characters",
+      );
+    }
+
+    const user = await findUserWithPasswordById(authReq.user.id);
+    if (!user) {
+      return sendError(res, HTTP_STATUS.NOT_FOUND, "User not found");
+    }
+
+    const isOldPasswordValid = await bcrypt.compare(oldPassword, user.password);
+    if (!isOldPasswordValid) {
+      return sendError(
+        res,
+        HTTP_STATUS.BAD_REQUEST,
+        "Old password is incorrect",
+      );
+    }
+
+    const trimmedNewPassword = newPassword.trim();
+    const hashedNewPassword = await bcrypt.hash(trimmedNewPassword, 10);
+    await updateUserPassword(user.id, hashedNewPassword, trimmedNewPassword);
+
+    return sendSuccess(res, HTTP_STATUS.OK, "Password changed successfully");
+  } catch (error: any) {
+    return sendError(
+      res,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR,
+      "Failed to change password",
       error.message,
     );
   }

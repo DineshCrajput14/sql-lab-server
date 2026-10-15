@@ -1,6 +1,11 @@
 import { pool } from "../config/database";
 import { ResultSetHeader, RowDataPacket } from "mysql2";
 import bcrypt from "bcryptjs";
+import {
+  ROLES,
+  ALL_APP_MODULES,
+  ALL_APP_ACTIVITIES,
+} from "../config/constants";
 
 export interface UserData {
   id?: number;
@@ -11,6 +16,25 @@ export interface UserData {
   phone?: string;
   userRoleCode: string;
   status?: string;
+  allowedAppModules?: string[];
+  allowedAppActivities?: string[];
+}
+
+export function getUserPermissions(user: any) {
+  if (user.userRoleCode === ROLES.ADMIN) {
+    return {
+      allowedAppModules: ALL_APP_MODULES,
+      allowedAppActivities: ALL_APP_ACTIVITIES,
+    };
+  }
+  return {
+    allowedAppModules: user.allowed_app_modules
+      ? JSON.parse(user.allowed_app_modules)
+      : [],
+    allowedAppActivities: user.allowed_app_activities
+      ? JSON.parse(user.allowed_app_activities)
+      : [],
+  };
 }
 
 export async function getUsersList(
@@ -65,7 +89,9 @@ export async function getUserById(id: number): Promise<any | null> {
       phone,
       userRoleCode,
       status,
-      COALESCE(plain_password, '') AS password
+      COALESCE(plain_password, '') AS password,
+      allowed_app_modules,
+      allowed_app_activities
     FROM users
     WHERE id = ?;
   `;
@@ -74,7 +100,17 @@ export async function getUserById(id: number): Promise<any | null> {
   if (!rows || rows.length === 0) {
     return null;
   }
-  return rows[0];
+
+  const user = rows[0];
+  const { allowedAppModules, allowedAppActivities } = getUserPermissions(user);
+  delete user.allowed_app_modules;
+  delete user.allowed_app_activities;
+
+  return {
+    ...user,
+    allowedAppModules,
+    allowedAppActivities,
+  };
 }
 
 export async function checkDuplicateUserIdentifier(
@@ -130,8 +166,8 @@ export async function createUser(data: UserData): Promise<number> {
   const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
   const query = `
-    INSERT INTO users (name, username, email, password, plain_password, phone, userRoleCode, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+    INSERT INTO users (name, username, email, password, plain_password, phone, userRoleCode, status, allowed_app_modules, allowed_app_activities)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
   `;
 
   const values = [
@@ -143,6 +179,8 @@ export async function createUser(data: UserData): Promise<number> {
     data.phone ? data.phone.trim() : null,
     data.userRoleCode || "STAFF",
     data.status || "Active",
+    JSON.stringify(data.allowedAppModules || []),
+    JSON.stringify(data.allowedAppActivities || []),
   ];
 
   const [result] = await pool.query<ResultSetHeader>(query, values);
@@ -161,6 +199,8 @@ export async function updateUser(id: number, data: UserData): Promise<boolean> {
     "phone = ?",
     "userRoleCode = ?",
     "status = ?",
+    "allowed_app_modules = ?",
+    "allowed_app_activities = ?",
   ];
 
   const values: any[] = [
@@ -170,6 +210,8 @@ export async function updateUser(id: number, data: UserData): Promise<boolean> {
     data.phone ? data.phone.trim() : null,
     data.userRoleCode || "STAFF",
     data.status || "Active",
+    JSON.stringify(data.allowedAppModules || []),
+    JSON.stringify(data.allowedAppActivities || []),
   ];
 
   if (data.password && data.password.trim()) {

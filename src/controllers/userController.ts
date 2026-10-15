@@ -53,7 +53,16 @@ export async function getUserDetailHandler(req: Request, res: Response) {
 
 export async function createNewUserHandler(req: Request, res: Response) {
   try {
-    const { name, email, phone, userRoleCode, password, status } = req.body;
+    const {
+      name,
+      email,
+      phone,
+      userRoleCode,
+      password,
+      status,
+      allowedAppModules,
+      allowedAppActivities,
+    } = req.body;
 
     if (!name || !name.trim()) {
       return sendError(res, HTTP_STATUS.BAD_REQUEST, "Full Name is required");
@@ -69,6 +78,14 @@ export async function createNewUserHandler(req: Request, res: Response) {
 
     if (!password || !password.trim()) {
       return sendError(res, HTTP_STATUS.BAD_REQUEST, "Password is required");
+    }
+
+    if (password.trim().length < 6) {
+      return sendError(
+        res,
+        HTTP_STATUS.BAD_REQUEST,
+        "Password must be at least 6 characters",
+      );
     }
 
     if (!userRoleCode || !userRoleCode.trim()) {
@@ -93,6 +110,8 @@ export async function createNewUserHandler(req: Request, res: Response) {
       userRoleCode: userRoleCode.trim(),
       password: password.trim(),
       status: status ? status.trim() : "Active",
+      allowedAppModules: allowedAppModules || [],
+      allowedAppActivities: allowedAppActivities || [],
     });
 
     return res.status(HTTP_STATUS.CREATED).json({
@@ -116,7 +135,16 @@ export async function editUserHandler(req: Request, res: Response) {
       return sendError(res, HTTP_STATUS.BAD_REQUEST, "Invalid User ID");
     }
 
-    const { name, email, phone, userRoleCode, password, status } = req.body;
+    const {
+      name,
+      email,
+      phone,
+      userRoleCode,
+      password,
+      status,
+      allowedAppModules,
+      allowedAppActivities,
+    } = req.body;
 
     if (!name || !name.trim()) {
       return sendError(res, HTTP_STATUS.BAD_REQUEST, "Full Name is required");
@@ -132,6 +160,18 @@ export async function editUserHandler(req: Request, res: Response) {
 
     if (!userRoleCode || !userRoleCode.trim()) {
       return sendError(res, HTTP_STATUS.BAD_REQUEST, "User Role is required");
+    }
+
+    if (!password || !password.trim()) {
+      return sendError(res, HTTP_STATUS.BAD_REQUEST, "Password is required");
+    }
+
+    if (password.trim().length < 6) {
+      return sendError(
+        res,
+        HTTP_STATUS.BAD_REQUEST,
+        "Password must be at least 6 characters",
+      );
     }
 
     if (
@@ -165,8 +205,10 @@ export async function editUserHandler(req: Request, res: Response) {
       email: trimmedIdentifier,
       phone: phone ? phone.trim() : null,
       userRoleCode: userRoleCode.trim(),
-      password: password && password.trim() ? password.trim() : undefined,
+      password: password.trim(),
       status: status ? status.trim() : "Active",
+      allowedAppModules: allowedAppModules,
+      allowedAppActivities: allowedAppActivities,
     });
 
     if (!success) {
