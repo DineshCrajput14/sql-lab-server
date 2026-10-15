@@ -1,5 +1,5 @@
 {
-  "name": "pms-backend",
+  "name": "sql-lab-backend",
   "version": "1.0.0",
   "description": "Property Management System Backend API",
   "main": "dist/server.js",
