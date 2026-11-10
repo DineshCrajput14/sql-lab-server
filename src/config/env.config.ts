@@ -5,7 +5,7 @@ dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
 export const env = {
   NODE_ENV: process.env.NODE_ENV || "development",
-  PORT: Number(process.env.PORT) || 5000,
+  PORT: Number(process.env.PORT) || 8800,
   DB: {
     HOST: process.env.DB_HOST || "localhost",
     PORT: Number(process.env.DB_PORT) || 3306,

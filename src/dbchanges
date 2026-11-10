@@ -1,0 +1,23 @@
+module.exports = async function (DBVersion, pool) {
+
+switch (DBVersion) {
+    case "1.1.2":
+        await pool.request().query(`
+            CREATE TABLE tbdoctormaster (
+            doctorid         INT AUTO_INCREMENT PRIMARY KEY,
+            doctorname       VARCHAR(100) NOT NULL,
+            paddress         VARCHAR(255) NULL,
+            caddress         VARCHAR(255) NULL,
+            phone            VARCHAR(20)  NULL,
+            emailid          VARCHAR(100) NULL,
+            commisionpvalue  DOUBLE NOT NULL DEFAULT 0
+            );
+              `);
+               await pool.request().query(`
+                UPDATE tbSettings1
+                SET VersionInfo='1.1.2'
+            `);
+        break;
+
+}
+};

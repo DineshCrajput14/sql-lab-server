@@ -79,13 +79,9 @@ export async function login(req: Request, res: Response) {
       allowedAppActivities,
     });
   } catch (error: any) {
-    return sendError(
-      res,
-      HTTP_STATUS.INTERNAL_SERVER_ERROR,
-      "Server error during authentication",
-      error.message,
-    );
-  }
+  console.error("[LOGIN ERROR]", error);
+  return sendError(res, HTTP_STATUS.INTERNAL_SERVER_ERROR, "Server error during authentication", error.message);
+}
 }
 
 export async function getProfile(req: Request, res: Response) {
