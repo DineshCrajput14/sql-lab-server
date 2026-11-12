@@ -956,3 +956,165 @@ export async function getAgreementExpiryReportData(
   const [rows] = await pool.query<RowDataPacket[]>(query, queryParams);
   return rows as AgreementExpiryRow[];
 }
+
+
+export interface PatientRegisterQueryParams {
+  status?: string; // Gender filter: ALL | Male | Female | Other
+  fromDate?: string;
+  toDate?: string;
+  searchField?: string;
+  keyword?: string;
+}
+
+export interface PatientRegisterRow {
+  id: number;
+  refNo: string;
+  date: string;
+  patientName: string;
+  fhName: string;
+  age: string;
+  gender: string;
+  amount: number;
+}
+
+export async function getPatientRegisterReport(
+  params: PatientRegisterQueryParams = {},
+): Promise<PatientRegisterRow[]> {
+  let query = `
+    SELECT
+      tt.testtranid AS id,
+      COALESCE(tt.regno, '') AS refNo,
+      DATE_FORMAT(tt.\`date\`, '%Y-%m-%d') AS date,
+      COALESCE(tt.patientname, '') AS patientName,
+      COALESCE(tt.fhname, '') AS fhName,
+      TRIM(CONCAT(COALESCE(tt.age, ''), ' ', COALESCE(tt.agetime, ''))) AS age,
+      COALESCE(tt.gender, '') AS gender,
+      COALESCE(tt.amount, 0) AS amount
+    FROM tbtesttran tt
+    WHERE 1=1
+  `;
+  const queryParams: any[] = [];
+
+  if (params.fromDate) {
+    query += ` AND DATE(tt.\`date\`) >= ?`;
+    queryParams.push(params.fromDate);
+  }
+
+  if (params.toDate) {
+    query += ` AND DATE(tt.\`date\`) <= ?`;
+    queryParams.push(params.toDate);
+  }
+
+  if (params.status && params.status !== "ALL") {
+    query += ` AND LOWER(COALESCE(tt.gender, '')) = ?`;
+    queryParams.push(String(params.status).trim().toLowerCase());
+  }
+
+  if (params.keyword && params.keyword.trim()) {
+    const keywordFilter = `%${params.keyword.trim()}%`;
+    const searchOption = params.searchField || "ALL";
+
+    if (searchOption === "refNo" || searchOption === "regNo") {
+      query += ` AND tt.regno LIKE ?`;
+      queryParams.push(keywordFilter);
+    } else if (searchOption === "patientName") {
+      query += ` AND tt.patientname LIKE ?`;
+      queryParams.push(keywordFilter);
+    } else if (searchOption === "fhName") {
+      query += ` AND tt.fhname LIKE ?`;
+      queryParams.push(keywordFilter);
+    } else {
+      query += ` AND (tt.regno LIKE ? OR tt.patientname LIKE ? OR tt.fhname LIKE ?)`;
+      queryParams.push(keywordFilter, keywordFilter, keywordFilter);
+    }
+  }
+
+  query += ` ORDER BY tt.\`date\` DESC, tt.testtranid DESC;`;
+
+  const [rows] = await pool.query<RowDataPacket[]>(query, queryParams);
+  return rows as PatientRegisterRow[];
+}
+
+export interface DoctorSummaryQueryParams {
+  status?: string; // Gender filter: ALL | Male | Female | Other
+  fromDate?: string;
+  toDate?: string;
+  searchField?: string;
+  keyword?: string;
+}
+
+export interface DoctorSummaryRow {
+  id: number;
+  refNo: string;
+  date: string;
+  patientName: string;
+  fhName: string;
+  age: string;
+  gender: string;
+  amount: number;
+  commissionPercent: number;
+  incentive: number;
+}
+
+export async function getDoctorSummaryReport(
+  params: DoctorSummaryQueryParams = {},
+): Promise<DoctorSummaryRow[]> {
+  let query = `
+    SELECT
+      tt.testtranid AS id,
+      COALESCE(tt.regno, '') AS refNo,
+      DATE_FORMAT(tt.\`date\`, '%Y-%m-%d') AS date,
+      COALESCE(tt.patientname, '') AS patientName,
+      COALESCE(tt.fhname, '') AS fhName,
+      TRIM(CONCAT(COALESCE(tt.age, ''), ' ', COALESCE(tt.agetime, ''))) AS age,
+      COALESCE(tt.gender, '') AS gender,
+      COALESCE(tt.amount, 0) AS amount,
+      COALESCE(tt.commisionp, 0) AS commissionPercent,
+      COALESCE(tt.commisionvalue, 0) AS incentive
+    FROM tbtesttran tt
+    WHERE 1=1
+  `;
+  const queryParams: any[] = [];
+
+  if (params.fromDate) {
+    query += ` AND DATE(tt.\`date\`) >= ?`;
+    queryParams.push(params.fromDate);
+  }
+
+  if (params.toDate) {
+    query += ` AND DATE(tt.\`date\`) <= ?`;
+    queryParams.push(params.toDate);
+  }
+
+  if (params.status && params.status !== "ALL") {
+    query += ` AND LOWER(COALESCE(tt.gender, '')) = ?`;
+    queryParams.push(String(params.status).trim().toLowerCase());
+  }
+
+  if (params.keyword && params.keyword.trim()) {
+    const keywordFilter = `%${params.keyword.trim()}%`;
+    const searchOption = params.searchField || "ALL";
+
+    if (searchOption === "refNo" || searchOption === "regNo") {
+      query += ` AND tt.regno LIKE ?`;
+      queryParams.push(keywordFilter);
+    } else if (searchOption === "patientName") {
+      query += ` AND tt.patientname LIKE ?`;
+      queryParams.push(keywordFilter);
+    } else if (searchOption === "fhName") {
+      query += ` AND tt.fhname LIKE ?`;
+      queryParams.push(keywordFilter);
+    } else if (searchOption === "refDoctor") {
+      query += ` AND tt.refdoctor LIKE ?`;
+      queryParams.push(keywordFilter);
+    } else {
+      query += ` AND (tt.regno LIKE ? OR tt.patientname LIKE ? OR tt.fhname LIKE ? OR tt.refdoctor LIKE ?)`;
+      queryParams.push(keywordFilter, keywordFilter, keywordFilter, keywordFilter);
+    }
+  }
+
+  query += ` ORDER BY tt.\`date\` DESC, tt.testtranid DESC;`;
+
+  const [rows] = await pool.query<RowDataPacket[]>(query, queryParams);
+  return rows as DoctorSummaryRow[];
+}

@@ -12,6 +12,10 @@ import {
   OccupancyReportQueryParams,
   getAgreementExpiryReportData,
   AgreementExpiryQueryParams,
+  getPatientRegisterReport,
+  PatientRegisterQueryParams,
+  getDoctorSummaryReport,
+  DoctorSummaryQueryParams,
 } from "../models/reportModel";
 import { sendError } from "../utils/apiResponse";
 import { HTTP_STATUS } from "../config/constants";
@@ -222,6 +226,59 @@ export async function getAgreementExpiryReport(req: Request, res: Response) {
       res,
       HTTP_STATUS.INTERNAL_SERVER_ERROR,
       "Failed to fetch agreement expiry report",
+      error.message,
+    );
+  }
+}
+
+
+
+export async function getPatientRegister(req: Request, res: Response) {
+  try {
+    const { status, fromDate, toDate, searchField, keyword } = req.query;
+
+    const queryParams: PatientRegisterQueryParams = {
+      status: status ? String(status) : undefined,
+      fromDate: fromDate ? String(fromDate) : undefined,
+      toDate: toDate ? String(toDate) : undefined,
+      searchField: searchField ? String(searchField) : undefined,
+      keyword: keyword ? String(keyword) : undefined,
+    };
+
+    const report = await getPatientRegisterReport(queryParams);
+
+    return res.status(HTTP_STATUS.OK).json({ report });
+  } catch (error: any) {
+    return sendError(
+      res,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR,
+      "Failed to fetch patient register report",
+      error.message,
+    );
+  }
+}
+
+
+export async function getDoctorSummary(req: Request, res: Response) {
+  try {
+    const { status, fromDate, toDate, searchField, keyword } = req.query;
+
+    const queryParams: DoctorSummaryQueryParams = {
+      status: status ? String(status) : undefined,
+      fromDate: fromDate ? String(fromDate) : undefined,
+      toDate: toDate ? String(toDate) : undefined,
+      searchField: searchField ? String(searchField) : undefined,
+      keyword: keyword ? String(keyword) : undefined,
+    };
+
+    const report = await getDoctorSummaryReport(queryParams);
+
+    return res.status(HTTP_STATUS.OK).json({ report });
+  } catch (error: any) {
+    return sendError(
+      res,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR,
+      "Failed to fetch doctor summary report",
       error.message,
     );
   }

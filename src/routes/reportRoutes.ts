@@ -6,6 +6,8 @@ import {
   getOutstandingRegister,
   getOccupancyReport,
   getAgreementExpiryReport,
+  getPatientRegister,
+  getDoctorSummary,
 } from "../controllers/reportController";
 import { authenticate } from "../middlewares/authentication";
 
@@ -19,5 +21,7 @@ router.get("/reports/monthly-refund-register", getMonthlyRefundRegister);
 router.get("/reports/outstanding", getOutstandingRegister);
 router.get("/reports/occupancy-report", getOccupancyReport);
 router.get("/reports/agreement-expiry", getAgreementExpiryReport);
+router.get("/reports/patient-register", getPatientRegister);
+router.get("/reports/doctor-summary", getDoctorSummary);
 
 export default router;
