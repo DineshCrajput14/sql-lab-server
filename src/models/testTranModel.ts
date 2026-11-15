@@ -1,4 +1,3 @@
-
 import { pool } from "../config/database";
 
 export interface TestTranDetailInput {
@@ -38,6 +37,14 @@ export interface TestTranInput {
   sampledrawnon?: string | null;
   sampleReceivedOn?: string | null;
   samplereceivedon?: string | null;
+
+  reportDate?: string | null;
+  reportdate?: string | null;
+  reportStatus?: boolean | number | string;
+  reportstatus?: boolean | number | string;
+  finalPayment?: boolean | number | string;
+  finalpayment?: boolean | number | string;
+
   ageTime?: string | null;
   agetime?: string | null;
   vdrlTest?: boolean | number;
@@ -45,8 +52,18 @@ export interface TestTranInput {
   raTest?: boolean | number;
   ratest?: boolean | number;
   amount?: number | string;
+
+  testtotal?: number | string | null;
+  testTotal?: number | string | null;
+  wtestvalue?: number | string | null;
+  wtestValue?: number | string | null;
+  discp?: number | string | null;
+  discAmount?: number | string | null;
+  discamount?: number | string | null;
+
   address1?: string | null;
   address2?: string | null;
+
   titleId?: number | string | null;
   titleid?: number | string | null;
   datachanged?: string | null;
@@ -60,6 +77,7 @@ export interface TestTranInput {
   commisionp?: number | string;
   commissionValue?: number | string;
   commisionvalue?: number | string;
+
   details?: TestTranDetailInput[];
   tests?: TestTranDetailInput[];
 }
@@ -80,12 +98,24 @@ const SELECT_FIELDS = `
   tbtesttran.reportnumber,
   tbtesttran.sampledrawnon,
   tbtesttran.samplereceivedon,
+
+  tbtesttran.reportdate,
+  tbtesttran.reportstatus,
+  tbtesttran.finalpayment,
+
   tbtesttran.agetime,
   tbtesttran.vdrltest,
   tbtesttran.ratest,
   tbtesttran.amount,
+
+  tbtesttran.testtotal,
+  tbtesttran.wtestvalue,
+  tbtesttran.discp,
+  tbtesttran.discAmount,
+
   tbtesttran.address1,
   tbtesttran.address2,
+
   tbtesttran.printingcount,
   tbtesttran.titleid,
   tbtesttran.datachanged,
@@ -105,6 +135,24 @@ function toFlag(value: any, defaultValue = 0): number {
   }
 
   return value === true || value === 1 || value === "1" ? 1 : 0;
+}
+
+function toMySQLDateTime(value: any): string | null {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  const dateString = String(value).trim().replace("T", " ");
+
+  if (dateString.length === 16) {
+    return `${dateString}:00`;
+  }
+
+  if (dateString.length === 10) {
+    return `${dateString} 00:00:00`;
+  }
+
+  return dateString;
 }
 
 function toNumberOrNull(value: any): number | null {
@@ -145,7 +193,7 @@ function cleanDetails(input: TestTranInput): TestTranDetailInput[] {
       testValue:
         testValue === null || testValue === undefined
           ? null
-          : String(testValue)
+          : String(testValue),
     };
   });
 }
@@ -159,6 +207,10 @@ function cleanMain(input: TestTranInput) {
     throw new Error("Patient name is required");
   }
 
+  const reportStatus = toFlag(
+    input.reportStatus ?? input.reportstatus
+  );
+
   return {
     patientname: patientName,
     fhname: input.fhName ?? input.fhname ?? null,
@@ -168,18 +220,49 @@ function cleanMain(input: TestTranInput) {
     date: input.testDate ?? input.date ?? null,
     widaltest: toFlag(input.widalTest ?? input.widaltest),
     printout: toFlag(input.printout),
+
     sampledrawnby: input.sampleDrawnBy ?? input.sampledrawnby ?? null,
     samplename: input.sampleName ?? input.samplename ?? null,
     reportnumber: input.reportNumber ?? input.reportnumber ?? null,
     sampledrawnon: input.sampleDrawnOn ?? input.sampledrawnon ?? null,
-    samplereceivedon:
-      input.sampleReceivedOn ?? input.samplereceivedon ?? null,
+
+    samplereceivedon: toMySQLDateTime(
+      input.sampleReceivedOn ?? input.samplereceivedon
+    ),
+
+    reportdate: toMySQLDateTime(
+      input.reportDate ?? input.reportdate
+    ),
+
+    reportstatus: reportStatus,
+
+    // Final payment is inserted only during CREATE.
+    finalpayment: toFlag(
+      input.finalPayment ?? input.finalpayment,
+      0
+    ),
+
     agetime: input.ageTime ?? input.agetime ?? null,
     vdrltest: toFlag(input.vdrlTest ?? input.vdrltest),
     ratest: toFlag(input.raTest ?? input.ratest),
     amount: toNumberOrNull(input.amount) ?? 0,
+
+    testtotal:
+      toNumberOrNull(input.testtotal ?? input.testTotal) ?? 0,
+
+    wtestvalue:
+      toNumberOrNull(input.wtestvalue ?? input.wtestValue) ?? 0,
+
+    discp: toNumberOrNull(input.discp) ?? 0,
+
+    discAmount:
+      toNumberOrNull(input.discAmount ?? input.discamount) ?? 0,
+
     address1: input.address1 ?? null,
+
+    // IMPORTANT: Only address2 is used.
     address2: input.address2 ?? null,
+
     titleid: toNumberOrNull(input.titleId ?? input.titleid),
     datachanged: input.datachanged ?? null,
     passwordtext: input.passwordtext ?? null,
@@ -188,15 +271,14 @@ function cleanMain(input: TestTranInput) {
     sno: toNumberOrNull(input.sno),
     regno: input.regno ?? null,
     labno: input.labno ?? null,
-    commisionp: toNumberOrNull(
-      input.commissionP ?? input.commisionp
-    ) ?? 0,
-    commisionvalue: toNumberOrNull(
-      input.commissionValue ?? input.commisionvalue
-    ) ?? 0
+
+    commisionp:
+      toNumberOrNull(input.commissionP ?? input.commisionp) ?? 0,
+
+    commisionvalue:
+      toNumberOrNull(input.commissionValue ?? input.commisionvalue) ?? 0,
   };
 }
-
 
 async function insertDetails(
   connection: any,
@@ -213,7 +295,7 @@ async function insertDetails(
         testTranId,
         detail.groupId ?? detail.groupid ?? null,
         detail.testId ?? detail.testid ?? null,
-        detail.testValue ?? detail.testvalue ?? ""
+        detail.testValue ?? detail.testvalue ?? "",
       ]
     );
   }
@@ -233,22 +315,20 @@ export async function getAll() {
   return rows;
 }
 
-
 export async function getById(id: number) {
   const [rows]: any = await pool.execute(
-    `SELECT ${SELECT_FIELDS},
-       d.doctorname AS refdoctorname
+    `SELECT
+        ${SELECT_FIELDS},
+        d.doctorname AS refdoctorname
      FROM tbtesttran
      LEFT JOIN tbdoctormaster d
         ON tbtesttran.refdoctor = d.doctorid
-     WHERE testtranid = ?`,
+     WHERE tbtesttran.testtranid = ?`,
     [id]
   );
 
   return rows[0] || null;
 }
-
-
 
 export async function getDetails(testtranid: number) {
   const [rows]: any = await pool.execute(
@@ -282,8 +362,6 @@ export async function getDetails(testtranid: number) {
   return rows;
 }
 
-
-
 export async function create(input: TestTranInput) {
   const main = cleanMain(input);
   const details = cleanDetails(input);
@@ -293,32 +371,28 @@ export async function create(input: TestTranInput) {
   let testTranId = 0;
 
   try {
-    // Start transaction
     await connection.beginTransaction();
 
-    // Step 1: Lock Reference Number generation
     const [lockResult]: any = await connection.execute(
       `SELECT GET_LOCK('tbtesttran_reference_lock', 10) AS lockStatus`
     );
 
     if (Number(lockResult[0]?.lockStatus) !== 1) {
-      throw new Error("Unable to generate Reference Number. Please try again.");
+      throw new Error(
+        "Unable to generate Reference Number. Please try again."
+      );
     }
 
     lockAcquired = true;
 
-    // Step 2: Get last saved Reference Number
     const [serialRows]: any = await connection.execute(
       `SELECT COALESCE(MAX(serialno), 0) AS lastSerialNo
        FROM tbtesttran`
     );
 
     const lastSerialNo = Number(serialRows[0]?.lastSerialNo || 0);
-
-    // Step 3: Generate next Reference Number
     const nextReferenceNo = lastSerialNo + 1;
 
-    // Step 4: Insert patient with generated Reference Number
     const [result]: any = await connection.execute(
       `INSERT INTO tbtesttran (
         patientname,
@@ -335,10 +409,21 @@ export async function create(input: TestTranInput) {
         reportnumber,
         sampledrawnon,
         samplereceivedon,
+
+        reportdate,
+        reportstatus,
+        finalpayment,
+
         agetime,
         vdrltest,
         ratest,
         amount,
+
+        testtotal,
+        wtestvalue,
+        discp,
+        discAmount,
+
         address1,
         address2,
         titleid,
@@ -352,8 +437,11 @@ export async function create(input: TestTranInput) {
         commisionp,
         commisionvalue
       ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
       )`,
       [
         main.patientname,
@@ -370,10 +458,21 @@ export async function create(input: TestTranInput) {
         main.reportnumber,
         main.sampledrawnon,
         main.samplereceivedon,
+
+        main.reportdate,
+        main.reportstatus,
+        main.finalpayment,
+
         main.agetime,
         main.vdrltest,
         main.ratest,
         main.amount,
+
+        main.testtotal,
+        main.wtestvalue,
+        main.discp,
+        main.discAmount,
+
         main.address1,
         main.address2,
         main.titleid,
@@ -385,24 +484,19 @@ export async function create(input: TestTranInput) {
         main.regno,
         main.labno,
         main.commisionp,
-        main.commisionvalue
+        main.commisionvalue,
       ]
     );
 
     testTranId = Number(result.insertId);
 
-    // Step 5: Insert selected tests
     await insertDetails(connection, testTranId, details);
 
-    // Step 6: Commit transaction
     await connection.commit();
-
   } catch (error) {
     await connection.rollback();
     throw error;
-
   } finally {
-    // Release named lock
     if (lockAcquired) {
       await connection.execute(
         `SELECT RELEASE_LOCK('tbtesttran_reference_lock')`
@@ -412,10 +506,8 @@ export async function create(input: TestTranInput) {
     connection.release();
   }
 
-  // Step 7: Return saved patient
   return getById(testTranId);
 }
-
 
 export async function getNextReferenceNo(): Promise<number> {
   const [rows]: any = await pool.execute(
@@ -450,10 +542,20 @@ export async function update(id: number, input: TestTranInput) {
          reportnumber = ?,
          sampledrawnon = ?,
          samplereceivedon = ?,
+
+         reportdate = ?,
+         reportstatus = ?,
+
          agetime = ?,
          vdrltest = ?,
          ratest = ?,
          amount = ?,
+
+         testtotal = ?,
+         wtestvalue = ?,
+         discp = ?,
+         discAmount = ?,
+
          address1 = ?,
          address2 = ?,
          titleid = ?,
@@ -481,10 +583,20 @@ export async function update(id: number, input: TestTranInput) {
         main.reportnumber,
         main.sampledrawnon,
         main.samplereceivedon,
+
+        main.reportdate,
+        main.reportstatus,
+
         main.agetime,
         main.vdrltest,
         main.ratest,
         main.amount,
+
+        main.testtotal,
+        main.wtestvalue,
+        main.discp,
+        main.discAmount,
+
         main.address1,
         main.address2,
         main.titleid,
@@ -496,7 +608,7 @@ export async function update(id: number, input: TestTranInput) {
         main.labno,
         main.commisionp,
         main.commisionvalue,
-        id
+        id,
       ]
     );
 
@@ -515,8 +627,8 @@ export async function update(id: number, input: TestTranInput) {
     }
 
     // Reference Number is NOT changed during edit.
+    // finalpayment is NOT updated during edit.
 
-    // Replace selected test details only if supplied.
     if (input.details !== undefined || input.tests !== undefined) {
       const details = cleanDetails(input);
 
@@ -530,7 +642,6 @@ export async function update(id: number, input: TestTranInput) {
     }
 
     await connection.commit();
-
   } catch (error) {
     await connection.rollback();
     throw error;
