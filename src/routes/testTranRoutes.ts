@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticate } from "../middlewares/authentication";
+import { getLabDashboardSummary } from "../controllers/labDashboardController";
 
 import {
     getNextReferenceNo,
@@ -19,6 +20,8 @@ const router = Router();
 
 router.use(authenticate);
 
+
+router.get("/lab-dashboard-summary", getLabDashboardSummary);
 // Lab Test Transactions
 router.get("/test-tran/next-reference-no", getNextReferenceNo);
 router.get("/test-tran", getTestTrans);
@@ -32,5 +35,7 @@ router.get("/widal-methods", getWidalMethods);
 router.put( "/test-tran/:id/widal-data",  saveWidalTestData);
 
 router.get("/test-tran/:id/widal-data", getWidalData);
+
+
 
 export default router;
