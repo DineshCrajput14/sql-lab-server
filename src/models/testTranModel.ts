@@ -11,6 +11,18 @@ export interface TestTranDetailInput {
   testvalue?: string | null;
 }
 
+
+export interface WidalTestInput {
+  wtestid?: number | string | null;
+  WTestId?: number | string | null;
+
+  dilution1?: string | null;
+  dilution2?: string | null;
+  dilution3?: string | null;
+  dilution4?: string | null;
+  dilution5?: string | null;
+  dilution6?: string | null;
+}
 export interface TestTranInput {
   patientName?: string;
   patientname?: string;
@@ -80,6 +92,16 @@ export interface TestTranInput {
 
   details?: TestTranDetailInput[];
   tests?: TestTranDetailInput[];
+
+  widalMethodId?: number | string | null;
+widalmethodid?: number | string | null;
+
+widalResultId?: number | string | null;
+widalresultid?: number | string | null;
+
+widalTests?: WidalTestInput[];
+widaltests?: WidalTestInput[];
+widalValues?: WidalTestInput[];
 }
 
 const SELECT_FIELDS = `
@@ -491,6 +513,12 @@ export async function create(input: TestTranInput) {
     testTranId = Number(result.insertId);
 
     await insertDetails(connection, testTranId, details);
+    await saveWidalData(
+  connection,
+  testTranId,
+  input,
+  main.widaltest
+);
 
     await connection.commit();
   } catch (error) {
@@ -692,5 +720,220 @@ export async function remove(id: number) {
     throw error;
   } finally {
     connection.release();
+  }
+}
+
+
+export async function saveWidalOnly(
+  patientId: number,
+  input: TestTranInput
+) {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const [patientRows]: any = await connection.execute(
+      `SELECT testtranid, widaltest
+       FROM tbtesttran
+       WHERE testtranid = ?
+       FOR UPDATE`,
+      [patientId]
+    );
+
+    if (!patientRows.length) {
+      throw new Error("Patient record not found");
+    }
+
+    const widalEnabled = Number(patientRows[0].widaltest);
+
+    await saveWidalData(
+      connection,
+      patientId,
+      input,
+      widalEnabled
+    );
+
+    await connection.commit();
+
+    return await getWidalData(patientId);
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function getWidalMethods() {
+  const [rows]: any = await pool.execute(
+    `SELECT methodid, methodname
+     FROM tbwmethod
+     ORDER BY methodid`
+  );
+
+  return rows;
+}
+
+
+export async function getWidalData(patientId: number) {
+  // Check connected database
+  const [databaseRows]: any = await pool.execute(
+    `SELECT DATABASE() AS databaseName`
+  );
+
+  console.log("Connected Database:", databaseRows[0]?.databaseName);
+
+  // Load Widal Method and Result
+  const [methodRows]: any = await pool.execute(
+    `SELECT
+       patientid,
+       methodid,
+       resultid
+     FROM tbwidaltestmethod
+     WHERE patientid = ?`,
+    [patientId]
+  );
+
+  console.log("Widal Method Result Rows:", methodRows);
+
+  // Load Widal Test Dilution Data with Test Name
+  const [testRows]: any = await pool.execute(
+    `SELECT
+       wt.Id AS id,
+       wt.WTestId AS wtestid,
+       wt.PatientId AS patientid,
+       wtm.testname AS testname,
+       wt.Dilution1 AS dilution1,
+       wt.Dilution2 AS dilution2,
+       wt.Dilution3 AS dilution3,
+       wt.Dilution4 AS dilution4,
+       wt.Dilution5 AS dilution5,
+       wt.Dilution6 AS dilution6,
+       wt.Dilution7 AS dilution7,
+       wt.Dilution8 AS dilution8,
+       wt.Dilution9 AS dilution9,
+       wt.Dilution10 AS dilution10
+     FROM tbwtest wt
+     LEFT JOIN tbwidaltest wtm
+       ON wtm.widaltestid = wt.WTestId
+     WHERE wt.PatientId = ?
+     ORDER BY wt.WTestId`,
+    [patientId]
+  );
+
+  return {
+    methodResult: methodRows.length > 0 ? methodRows[0] : null,
+    tests: testRows,
+  };
+}
+
+async function saveWidalData(
+  connection: any,
+  patientId: number,
+  input: TestTranInput,
+  widalEnabled: number
+) {
+  // Widal disabled: delete existing Widal records.
+  if (widalEnabled !== 1) {
+    await connection.execute(
+      `DELETE FROM tbwtest WHERE PatientId = ?`,
+      [patientId]
+    );
+
+    await connection.execute(
+      `DELETE FROM tbwidaltestmethod WHERE patientid = ?`,
+      [patientId]
+    );
+
+    return;
+  }
+
+  const methodId = toNumberOrNull(
+    input.widalMethodId ?? input.widalmethodid
+  );
+
+  const resultId = toNumberOrNull(
+    input.widalResultId ?? input.widalresultid
+  );
+
+  // Save method/result only if both selected.
+  if (
+    methodId !== null &&
+    resultId !== null &&
+    [1, 2].includes(methodId) &&
+    [1, 2].includes(resultId)
+  ) {
+    await connection.execute(
+      `DELETE FROM tbwidaltestmethod
+       WHERE patientid = ?`,
+      [patientId]
+    );
+
+    await connection.execute(
+      `INSERT INTO tbwidaltestmethod
+       (patientid, methodid, resultid)
+       VALUES (?, ?, ?)`,
+      [patientId, methodId, resultId]
+    );
+  }
+
+  const widalTests =
+    input.widalTests ??
+    input.widaltests ??
+    input.widalValues;
+
+  // If dilution data was not submitted, preserve existing values.
+  if (!Array.isArray(widalTests)) {
+    return;
+  }
+
+  await connection.execute(
+    `DELETE FROM tbwtest
+     WHERE PatientId = ?`,
+    [patientId]
+  );
+
+  const validWidalIds = [1, 2, 3, 4];
+
+  for (const widalId of validWidalIds) {
+    const item = widalTests.find(
+      (x) => Number(x.wtestid ?? x.WTestId) === widalId
+    );
+
+    const dilution1 = item?.dilution1 ?? "";
+    const dilution2 = item?.dilution2 ?? "";
+    const dilution3 = item?.dilution3 ?? "";
+    const dilution4 = item?.dilution4 ?? "";
+    const dilution5 = item?.dilution5 ?? "";
+    const dilution6 = item?.dilution6 ?? "";
+
+    await connection.execute(
+      `INSERT INTO tbwtest (
+        WTestId,
+        PatientId,
+        Dilution1,
+        Dilution2,
+        Dilution3,
+        Dilution4,
+        Dilution5,
+        Dilution6,
+        Dilution7,
+        Dilution8,
+        Dilution9,
+        Dilution10
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', '', '', '')`,
+      [
+        widalId,
+        patientId,
+        dilution1,
+        dilution2,
+        dilution3,
+        dilution4,
+        dilution5,
+        dilution6,
+      ]
+    );
   }
 }

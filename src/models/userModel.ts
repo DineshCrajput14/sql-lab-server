@@ -20,6 +20,7 @@ export interface UserData {
   allowedAppActivities?: string[];
 }
 
+
 export function getUserPermissions(user: any) {
   if (user.userRoleCode === ROLES.ADMIN) {
     return {
@@ -27,13 +28,17 @@ export function getUserPermissions(user: any) {
       allowedAppActivities: ALL_APP_ACTIVITIES,
     };
   }
+
   return {
-    allowedAppModules: user.allowed_app_modules
-      ? JSON.parse(user.allowed_app_modules)
-      : [],
-    allowedAppActivities: user.allowed_app_activities
-      ? JSON.parse(user.allowed_app_activities)
-      : [],
+    allowedAppModules:
+      typeof user.allowed_app_modules === "string"
+        ? JSON.parse(user.allowed_app_modules)
+        : user.allowed_app_modules || [],
+
+    allowedAppActivities:
+      typeof user.allowed_app_activities === "string"
+        ? JSON.parse(user.allowed_app_activities)
+        : user.allowed_app_activities || [],
   };
 }
 
@@ -80,37 +85,57 @@ export async function getUsersList(
 }
 
 export async function getUserById(id: number): Promise<any | null> {
-  const query = `
-    SELECT 
-      id,
-      name,
-      username,
-      email,
-      phone,
-      userRoleCode,
-      status,
-      COALESCE(plain_password, '') AS password,
-      allowed_app_modules,
-      allowed_app_activities
-    FROM users
-    WHERE id = ?;
-  `;
+  try {
+    console.log("GET USER ID:", id);
 
-  const [rows] = await pool.query<RowDataPacket[]>(query, [id]);
-  if (!rows || rows.length === 0) {
-    return null;
+    const query = `
+      SELECT 
+        id,
+        name,
+        username,
+        email,
+        phone,
+        userRoleCode,
+        status,
+        COALESCE(plain_password, '') AS password,
+        allowed_app_modules,
+        allowed_app_activities
+      FROM users
+      WHERE id = ?;
+    `;
+
+    const [rows] = await pool.query<RowDataPacket[]>(query, [id]);
+
+    console.log("USER ROW:", rows);
+
+    if (!rows || rows.length === 0) {
+      return null;
+    }
+
+    const user = rows[0];
+
+    console.log("USER ROLE:", user.userRoleCode);
+    console.log("MODULES:", user.allowed_app_modules);
+    console.log("ACTIVITIES:", user.allowed_app_activities);
+
+    const permissions = getUserPermissions(user);
+
+    console.log("PERMISSIONS:", permissions);
+
+    const { allowedAppModules, allowedAppActivities } = permissions;
+
+    delete user.allowed_app_modules;
+    delete user.allowed_app_activities;
+
+    return {
+      ...user,
+      allowedAppModules,
+      allowedAppActivities,
+    };
+  } catch (error) {
+    console.error("GET USER BY ID ERROR:", error);
+    throw error;
   }
-
-  const user = rows[0];
-  const { allowedAppModules, allowedAppActivities } = getUserPermissions(user);
-  delete user.allowed_app_modules;
-  delete user.allowed_app_activities;
-
-  return {
-    ...user,
-    allowedAppModules,
-    allowedAppActivities,
-  };
 }
 
 export async function checkDuplicateUserIdentifier(

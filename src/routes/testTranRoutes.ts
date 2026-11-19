@@ -8,7 +8,10 @@ import {
   getTestTranDetails,
   createTestTran,
   updateTestTran,
-  deleteTestTran
+  deleteTestTran,
+  getWidalMethods,
+  getWidalData,
+  saveWidalTestData,
 
 } from "../controllers/testTranController";
 
@@ -25,5 +28,9 @@ router.get("/test-tran/:id", getTestTran);
 router.post("/test-tran", createTestTran);
 router.put("/test-tran/:id", updateTestTran);
 router.delete("/test-tran/:id", deleteTestTran);
+router.get("/widal-methods", getWidalMethods);
+router.put( "/test-tran/:id/widal-data",  saveWidalTestData);
+
+router.get("/test-tran/:id/widal-data", getWidalData);
 
 export default router;

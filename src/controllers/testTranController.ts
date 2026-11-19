@@ -253,3 +253,102 @@ export async function deleteTestTran(
     );
   }
 }
+
+export async function getWidalMethods(
+  _req: Request,
+  res: Response
+) {
+  try {
+    const methods = await testTranModel.getWidalMethods();
+
+    return sendSuccess(
+      res,
+      HTTP_STATUS.OK,
+      "",
+      { methods }
+    );
+  } catch (error: any) {
+    console.error("[WIDAL METHODS]", error);
+
+    return sendError(
+      res,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR,
+      "Failed to load Widal Methods",
+      error.message
+    );
+  }
+}
+
+export async function saveWidalTestData(
+  req: Request,
+  res: Response
+) {
+  try {
+    const patientId = Number(req.params.id);
+
+    if (!Number.isInteger(patientId) || patientId <= 0) {
+      return sendError(
+        res,
+        HTTP_STATUS.BAD_REQUEST,
+        "Invalid Patient ID"
+      );
+    }
+
+    const widalData = await testTranModel.saveWidalOnly(
+      patientId,
+      req.body
+    );
+
+    return sendSuccess(
+      res,
+      HTTP_STATUS.OK,
+      "Widal data saved successfully",
+      { widalData }
+    );
+  } catch (error: any) {
+    console.error("[WIDAL SAVE ERROR]", error);
+
+    return sendError(
+      res,
+      HTTP_STATUS.BAD_REQUEST,
+      error.message || "Failed to save Widal data",
+      error.message
+    );
+  }
+}
+
+
+export async function getWidalData(
+  req: Request,
+  res: Response
+) {
+  try {
+    const patientId = Number(req.params.id);
+
+    if (!Number.isInteger(patientId) || patientId <= 0) {
+      return sendError(
+        res,
+        HTTP_STATUS.BAD_REQUEST,
+        "Invalid Patient ID"
+      );
+    }
+
+    const widalData = await testTranModel.getWidalData(patientId);
+
+    return sendSuccess(
+      res,
+      HTTP_STATUS.OK,
+      "",
+      { widalData }
+    );
+  } catch (error: any) {
+    console.error("[WIDAL DATA]", error);
+
+    return sendError(
+      res,
+      HTTP_STATUS.INTERNAL_SERVER_ERROR,
+      "Failed to load Widal data",
+      error.message
+    );
+  }
+}
