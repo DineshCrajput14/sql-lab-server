@@ -30,7 +30,7 @@ export async function getControlPanelSettings(): Promise<{
       start_serialno
     FROM control_panel_settings
     ORDER BY id ASC
-    LIMIT 1`
+    LIMIT 1`,
   );
 
   if (!rows || rows.length === 0) {
@@ -50,7 +50,7 @@ export async function getControlPanelSettings(): Promise<{
   return {
     controlPanelSetting: {
       tenantRegistrationNumberAuto: Boolean(
-        rows[0].tenant_registration_number_auto
+        rows[0].tenant_registration_number_auto,
       ),
 
       serialno: Boolean(rows[0].serialno),
@@ -67,10 +67,10 @@ export async function getControlPanelSettings(): Promise<{
 
 // SAVE CONTROL PANEL SETTINGS
 export async function saveControlPanelSettings(
-  data: ControlPanelSettingsData
+  data: ControlPanelSettingsData,
 ): Promise<boolean> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    "SELECT id FROM control_panel_settings ORDER BY id ASC LIMIT 1"
+    "SELECT id FROM control_panel_settings ORDER BY id ASC LIMIT 1",
   );
 
   const autoFlag = data.tenantRegistrationNumberAuto ? 1 : 0;
@@ -109,11 +109,7 @@ export async function saveControlPanelSettings(
         start_serialno = ?
     `;
 
-    const params: any[] = [
-      autoFlag,
-      serialFlag,
-      startSerialNum,
-    ];
+    const params: any[] = [autoFlag, serialFlag, startSerialNum];
 
     if (nextNum !== null) {
       query += ", next_number_tenant = ?";
@@ -128,10 +124,7 @@ export async function saveControlPanelSettings(
     query += " WHERE id = ?";
     params.push(id);
 
-    const [result] = await pool.query<ResultSetHeader>(
-      query,
-      params
-    );
+    const [result] = await pool.query<ResultSetHeader>(query, params);
 
     return result.affectedRows > 0;
   } else {
@@ -152,7 +145,7 @@ export async function saveControlPanelSettings(
         nextReceiptNum || 101,
         serialFlag,
         startSerialNum,
-      ]
+      ],
     );
 
     return result.affectedRows > 0;
@@ -175,5 +168,161 @@ export async function checkTestTranDataAvailable(): Promise<boolean> {
   } catch (error) {
     console.error("Error checking tbtesttran data:", error);
     throw error;
+  }
+}
+
+// GET NEXT TENANT REGISTRATION NUMBER AND INCREMENT
+export async function getNextTenantNumberAndIncrement(
+  usedNumber?: number | string,
+): Promise<string> {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const [rows] = (await connection.query(
+      `SELECT id, next_number_receipt
+   FROM control_panel_settings
+   LIMIT 1
+   FOR UPDATE`,
+    )) as [RowDataPacket[], any];
+
+    if (!rows || rows.length === 0) {
+      const nextNumber = 1;
+
+      await connection.query(
+        `INSERT INTO control_panel_settings
+         (id, tenant_registration_number_auto, next_number_tenant,
+          next_number_receipt, serialno, start_serialno)
+         VALUES (1, 1, 2, 101, 0, 1)`,
+      );
+
+      await connection.commit();
+
+      return String(nextNumber);
+    }
+
+    const id = rows[0].id;
+    const currentNumber = Number(rows[0].next_number_tenant) || 1;
+
+    // Manual registration number entered:
+    // keep the next counter ahead of the manually used number.
+    if (usedNumber !== undefined && usedNumber !== null && usedNumber !== "") {
+      const manualNumber = parseInt(String(usedNumber), 10);
+
+      if (!isNaN(manualNumber) && manualNumber >= currentNumber) {
+        await connection.query(
+          `UPDATE control_panel_settings
+           SET next_number_tenant = ?
+           WHERE id = ?`,
+          [manualNumber + 1, id],
+        );
+      }
+
+      await connection.commit();
+      return String(usedNumber);
+    }
+
+    // Auto number: take current and increment.
+    await connection.query(
+      `UPDATE control_panel_settings
+       SET next_number_tenant = ?
+       WHERE id = ?`,
+      [currentNumber + 1, id],
+    );
+
+    await connection.commit();
+
+    return String(currentNumber);
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+// GET NEXT RECEIPT NUMBER AND INCREMENT
+export async function getNextReceiptNumberAndIncrement(
+  externalConnection?: any,
+  usedNumber?: number | string,
+): Promise<string> {
+  const connection = externalConnection || (await pool.getConnection());
+  const ownConnection = !externalConnection;
+
+  try {
+    if (ownConnection) {
+      await connection.beginTransaction();
+    }
+
+    const [rows] = (await connection.query(
+      `SELECT id, next_number_receipt
+   FROM control_panel_settings
+   LIMIT 1
+   FOR UPDATE`,
+    )) as [RowDataPacket[], any];
+
+    if (!rows || rows.length === 0) {
+      const nextNumber = 101;
+
+      await connection.query(
+        `INSERT INTO control_panel_settings
+         (id, tenant_registration_number_auto, next_number_tenant,
+          next_number_receipt, serialno, start_serialno)
+         VALUES (1, 1, 1, 102, 0, 1)`,
+      );
+
+      if (ownConnection) {
+        await connection.commit();
+      }
+
+      return String(nextNumber);
+    }
+
+    const id = rows[0].id;
+    const currentNumber = Number(rows[0].next_number_receipt) || 101;
+
+    // Manual receipt number: synchronize next counter.
+    if (usedNumber !== undefined && usedNumber !== null && usedNumber !== "") {
+      const manualNumber = parseInt(String(usedNumber), 10);
+
+      if (!isNaN(manualNumber) && manualNumber >= currentNumber) {
+        await connection.query(
+          `UPDATE control_panel_settings
+           SET next_number_receipt = ?
+           WHERE id = ?`,
+          [manualNumber + 1, id],
+        );
+      }
+
+      if (ownConnection) {
+        await connection.commit();
+      }
+
+      return String(usedNumber);
+    }
+
+    // Auto receipt number: use current and increment.
+    await connection.query(
+      `UPDATE control_panel_settings
+       SET next_number_receipt = ?
+       WHERE id = ?`,
+      [currentNumber + 1, id],
+    );
+
+    if (ownConnection) {
+      await connection.commit();
+    }
+
+    return String(currentNumber);
+  } catch (error) {
+    if (ownConnection) {
+      await connection.rollback();
+    }
+    throw error;
+  } finally {
+    if (ownConnection) {
+      connection.release();
+    }
   }
 }

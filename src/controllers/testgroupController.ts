@@ -131,7 +131,10 @@ export async function deleteGroup(req: Request, res: Response) {
   }
 }
 
-export const updateTestGroupOrder = async (req, res) => {
+export const updateTestGroupOrder = async (
+  req: Request,
+  res: Response
+) => {
   try {
     const { groups } = req.body;
 
