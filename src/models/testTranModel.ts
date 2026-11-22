@@ -310,10 +310,9 @@ async function insertDetails(
   for (const detail of details) {
     await connection.execute(
       `INSERT INTO tbtesttrandetail
-       (testtranid, masterid, groupid, testid, testvalue, datachanged)
-       VALUES (?, ?, ?, ?, ?, NOW())`,
+       (masterid, groupid, testid, testvalue, datachanged)
+       VALUES (?, ?, ?, ?, NOW())`,
       [
-        testTranId,
         testTranId,
         detail.groupId ?? detail.groupid ?? null,
         detail.testId ?? detail.testid ?? null,
@@ -322,7 +321,6 @@ async function insertDetails(
     );
   }
 }
-
 export async function getAll() {
   const [rows]: any = await pool.execute(
     `SELECT
@@ -376,8 +374,8 @@ export async function getDetails(testtranid: number) {
        ON d.testid = t.testid
      LEFT JOIN tbgroupmaster g
        ON d.groupid = g.groupid
-     WHERE d.testtranid = ?
-     ORDER BY t.orderno, t.testname`,
+     WHERE d.masterid = ?
+     ORDER BY g.groupid, t.orderno, t.testname`,
     [testtranid]
   );
 
