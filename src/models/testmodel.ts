@@ -256,7 +256,7 @@ export async function getAll() {
      FROM tbtestmaster tm
      LEFT JOIN tbgroupmaster gm
        ON tm.groupid = gm.groupId
-     ORDER BY tm.orderno, tm.testname`
+     ORDER BY gm.groupId,tm.orderno, tm.testname`
   );
 
   return rows;
