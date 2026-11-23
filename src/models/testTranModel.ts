@@ -700,7 +700,7 @@ export async function remove(id: number) {
 
     await connection.execute(
       `DELETE FROM tbtesttrandetail
-       WHERE testtranid = ?`,
+       WHERE masterid = ?`,
       [id]
     );
 
