@@ -660,7 +660,7 @@ export async function update(id: number, input: TestTranInput) {
 
       await connection.execute(
         `DELETE FROM tbtesttrandetail
-         WHERE testtranid = ?`,
+         WHERE masterid = ?`,
         [id]
       );
 
