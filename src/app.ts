@@ -4,6 +4,7 @@ import helmet from "helmet";
 import compression from "compression";
 import v1Routes from "./routes";
 import { errorHandler } from "./middlewares/errorHandler";
+import { responseEncryptionMiddleware } from "./middlewares/responseEncryption.middleware";
 
 const app = express();
 
@@ -15,11 +16,20 @@ app.use(
     origin: true,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "X-Encrypt-Response",
+      "X-Skip-Response-Encryption",
+    ],
+    exposedHeaders: ["X-Response-Encrypted"],
   }),
 );
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
+// API Response Encryption
+app.use(responseEncryptionMiddleware);
 
 app.get("/", (req, res) => {
   res

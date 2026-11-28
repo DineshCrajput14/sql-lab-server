@@ -6,6 +6,12 @@ dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 export const env = {
   NODE_ENV: process.env.NODE_ENV || "development",
   PORT: Number(process.env.PORT) || 8800,
+  // Response Encryption
+  ENCRYPT_API_RESPONSE:
+    process.env.ENCRYPT_API_RESPONSE === "true",
+
+  API_RESPONSE_ENCRYPTION_KEY:
+    process.env.API_RESPONSE_ENCRYPTION_KEY || "",
   DB: {
     HOST: process.env.DB_HOST || "localhost",
     PORT: Number(process.env.DB_PORT) || 3306,
